@@ -1,26 +1,112 @@
 @import "tailwindcss";
 
+/* Tokens transcribed 1:1 from the Figma file's Properties panel.
+   See DESIGN_TOKENS.md for the source mapping. */
+@theme {
+  --color-brand: #ff5623;
+  --color-brand-soft: #ff8d36;
+  --color-dark: #2b2b2b;
+  --color-ink: #303030;
+  --color-btn: #181818;
+  --color-muted: #5e5e5e;
+  --color-surface: #ffffff;
+  --color-surface-2: #f6f6f6;
+  --color-surface-3: #f0f0f0;
+  --color-hairline: #cecece;
+
+  --color-success: #34ac15;
+  --color-success-tint: #45b529;
+  --color-danger: #c0350a;
+  --color-danger-tint: #ffe9e2;
+  --color-warning: #e3600f;
+  --color-warning-tint: #ff9900;
+
+  --color-hl-fill: #5eff35;
+  --color-hl-border: #3dd218;
+
+  --font-display: var(--font-bricolage), "Bricolage Grotesque", system-ui, sans-serif;
+  --font-ui: var(--font-inter), Inter, system-ui, sans-serif;
+
+  --radius-card: 16px;
+  --radius-drop: 20px;
+  --radius-btn: 64px;
+  --radius-pill: 100px;
+
+  --shadow-panel: 0 32px 48px 0 rgb(0 0 0 / 0.2), 0 16px 48px 0 rgb(0 0 0 / 0.12);
+  --shadow-badge: 0 4px 16px 0 rgb(67 67 67 / 0.1), 0 8px 8.8px 0 rgb(134 134 134 / 0.1);
+  --shadow-badge-active: 0 8px 8.8px 0 rgb(255 121 80 / 0.1);
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-page: linear-gradient(180deg, #f5f5f5 0%, #e9e5e5 100%);
+  --bg-mapping: linear-gradient(180deg, #eeeeee 0%, #dadada 100%);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-display);
+  color: var(--color-ink);
+  background: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Type scale — every style carries -4% tracking in the source file,
+   except the file-meta style which is -6%. */
+.t-h1 {
+  font-size: 40px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.t-h2 {
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.t-p1 {
+  font-size: 20px;
+  line-height: 1.4;
+  font-weight: 400;
+  letter-spacing: -0.04em;
+}
+.t-p3 {
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 400;
+  letter-spacing: -0.04em;
+}
+.t-p3-bold {
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.t-p4 {
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+.t-p5 {
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 400;
+  letter-spacing: -0.04em;
+}
+.t-badge {
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+.t-meta {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 400;
+  letter-spacing: -0.06em;
 }
