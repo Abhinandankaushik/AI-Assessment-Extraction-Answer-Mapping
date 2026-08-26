@@ -53,7 +53,7 @@ export function DropZone({
         setDragging(false);
         accept(e.dataTransfer.files[0]);
       }}
-      className={`relative grid h-[181px] flex-1 place-items-center rounded-drop border-[1.5px] border-dashed bg-surface p-2.5 transition-colors ${
+      className={`relative grid h-[127px] flex-none place-items-center rounded-drop border-[1.5px] border-dashed bg-surface px-2.5 py-4 transition-colors md:h-[181px] md:flex-1 md:p-2.5 ${
         dragging ? "border-brand bg-brand/5" : "border-hairline"
       }`}
     >
@@ -90,12 +90,12 @@ export function DropZone({
           />
           <label
             htmlFor={inputId}
-            className="flex cursor-pointer flex-col items-center gap-2.5"
+            className="flex cursor-pointer flex-col items-center gap-1 md:gap-2.5"
           >
-            <span className="grid size-11 place-items-center rounded-xl bg-[#F3F3F3] text-ink">
-              <Upload size={20} />
+            <span className="grid size-10 place-items-center rounded-[7px] bg-[#F3F3F3] text-ink md:size-12 md:rounded-lg">
+              <Upload className="size-[27px] md:size-8" strokeWidth={1.8} />
             </span>
-            <span className="t-p3-bold text-dark">
+            <span className="text-[18px] leading-[1.4] font-bold tracking-[-0.04em] text-dark md:text-[20px] md:leading-[22px] md:font-semibold md:tracking-[-0.06em]">
               Upload <span className="text-brand">{label}</span>
             </span>
             <span className="t-meta text-muted/55">

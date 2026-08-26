@@ -30,24 +30,24 @@ export function UploadScreen() {
   );
 
   return (
-    <div className="grid h-full place-items-center overflow-y-auto px-4 py-4">
+    <div className="grid h-full place-items-center overflow-y-auto px-2.5 pb-6 md:px-4 md:py-4">
       <div className="flex w-full max-w-[789px] flex-col items-center">
-        {/* Hero column: Figma stacks heading, subtitle, artwork and the
-            drop-zone card on a uniform 20px rhythm. */}
         <div className="flex w-full flex-col items-center gap-5">
-          <h1 className="t-h1 text-center">
-            <span className="text-dark">Upload </span>
-            <span className="rounded-lg bg-[#FFDECB] px-1.5 text-brand">
+          {/* Phone frames use a single dark 24px line; the desktop frame splits
+              the headline and highlights the second half. */}
+          <h1 className="text-center text-[24px] leading-[1.2] font-bold tracking-[-0.04em] text-dark md:text-[40px]">
+            Upload{" "}
+            <span className="md:rounded-lg md:bg-[#FFDECB] md:px-1.5 md:text-brand">
               Question Paper &amp; Answer Sheets
             </span>
           </h1>
-          <p className="t-p1 text-center text-ink">
+          <p className="t-p1 hidden text-center text-ink md:block">
             Upload both files to get started
           </p>
 
           <HeroIllustration />
 
-          <div className="flex h-[205px] w-full gap-4 rounded-[24px] bg-white/50 p-3">
+          <div className="flex w-full flex-col gap-3 rounded-[24px] bg-white/50 p-3 md:h-[205px] md:flex-row md:gap-4">
             <DropZone
               kind="question"
               label="Question Paper"
@@ -66,7 +66,7 @@ export function UploadScreen() {
         </div>
 
         <PrimaryButton
-          className="mt-10"
+          className="mt-8 md:mt-10"
           disabled={!ready}
           onClick={() => setPhase("extracting")}
         >
@@ -74,7 +74,7 @@ export function UploadScreen() {
           <ArrowRight size={16} />
         </PrimaryButton>
 
-        <p className="t-p5 mt-4 text-center text-muted/70">
+        <p className="t-p5 mt-4 max-w-[320px] text-center text-muted/70 md:max-w-none">
           Once both files are uploaded, you&rsquo;ll be able to map answers with
           questions
         </p>
