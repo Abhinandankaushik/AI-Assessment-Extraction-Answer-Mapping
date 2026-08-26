@@ -104,7 +104,7 @@ export default function DebugMapping() {
   }
 
   return (
-    <AppShell collapsed variant="mapping">
+    <AppShell variant="mapping">
       <MappingScreen />
     </AppShell>
   );

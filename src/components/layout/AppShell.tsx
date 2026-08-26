@@ -5,11 +5,9 @@ import { TopBar } from "./TopBar";
 
 export function AppShell({
   children,
-  collapsed = false,
   variant = "page",
 }: {
   children: ReactNode;
-  collapsed?: boolean;
   variant?: "page" | "mapping";
 }) {
   const desktopBackground =
@@ -27,12 +25,13 @@ export function AppShell({
         />
       )}
 
-      {/* Phone: a single floating bar. Desktop: 1440 frame with a 12px inset,
-          which yields the 1100px content column the Figma frames use. */}
-      <div className="relative flex h-full flex-col md:mx-auto md:max-w-[1440px] md:flex-row md:gap-3 md:p-3">
+      {/* The Figma frame is 1440 wide, but the layout is fluid rather than
+          capped there — a wider display should fill, not sit inside grey
+          margins. The sidebar keeps its fixed 304px and the content flexes. */}
+      <div className="relative flex h-full flex-col md:flex-row md:gap-3 md:p-3">
         <MobileHeader />
         <div className="hidden md:flex">
-          <Sidebar collapsed={collapsed} />
+          <Sidebar />
         </div>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col md:gap-3">
           <div className="hidden md:block">

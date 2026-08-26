@@ -43,6 +43,7 @@ interface AppState extends Omit<RunData, "summary"> {
   progress: Progress;
   error: string | null;
   selectedQuestionId: string | null;
+  sidebarCollapsed: boolean;
 
   setFile: (file: UploadedFile) => void;
   removeFile: (kind: UploadKind) => void;
@@ -50,6 +51,7 @@ interface AppState extends Omit<RunData, "summary"> {
   setProgress: (progress: Progress) => void;
   fail: (message: string) => void;
   selectQuestion: (questionId: string | null) => void;
+  toggleSidebar: () => void;
   loadRun: (run: RunData) => void;
   reset: () => void;
 }
@@ -66,6 +68,7 @@ const EMPTY = {
   summary: null as GradingSummary | null,
   orphanBlockIds: [],
   selectedQuestionId: null,
+  sidebarCollapsed: false,
 };
 
 export const useAppStore = create<AppState>((set) => ({
@@ -77,6 +80,8 @@ export const useAppStore = create<AppState>((set) => ({
   setProgress: (progress) => set({ progress }),
   fail: (message) => set({ phase: "error", error: message }),
   selectQuestion: (selectedQuestionId) => set({ selectedQuestionId }),
+  toggleSidebar: () =>
+    set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
   loadRun: (run) =>
     set({

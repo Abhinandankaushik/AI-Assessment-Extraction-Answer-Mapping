@@ -43,8 +43,10 @@ function encode(canvas: HTMLCanvasElement): string {
   return canvas.toDataURL("image/jpeg", QUALITY);
 }
 
-const OPEN_TIMEOUT_MS = 30_000;
-const PAGE_TIMEOUT_MS = 25_000;
+// Generous on purpose: these exist to catch a genuine hang, not to police a
+// slow render of a large scan on a modest machine.
+const OPEN_TIMEOUT_MS = 60_000;
+const PAGE_TIMEOUT_MS = 60_000;
 
 /**
  * A malformed embedded font once put pdf.js into a loop that pinned the tab

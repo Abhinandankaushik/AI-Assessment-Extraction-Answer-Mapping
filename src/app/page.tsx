@@ -33,10 +33,7 @@ export default function Home() {
   }, [phase, files, setProgress, fail, loadRun]);
 
   return (
-    <AppShell
-      collapsed={phase !== "upload"}
-      variant={phase === "mapping" ? "mapping" : "page"}
-    >
+    <AppShell variant={phase === "mapping" ? "mapping" : "page"}>
       {phase === "upload" && <UploadScreen />}
       {phase === "extracting" && <ExtractingScreen />}
       {phase === "mapping" && <MappingScreen />}

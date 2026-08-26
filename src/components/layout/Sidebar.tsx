@@ -6,12 +6,12 @@ import {
   FileText,
   LayoutGrid,
   MonitorPlay,
-  PanelLeft,
   PieChart,
   Settings,
   Sparkles,
 } from "lucide-react";
-import { LogoMark, Wordmark } from "@/components/brand/Logo";
+import { LogoMark, PanelToggleIcon, Wordmark } from "@/components/brand/Logo";
+import { useAppStore } from "@/lib/store";
 
 const NAV = [
   { label: "Home", icon: LayoutGrid },
@@ -42,7 +42,12 @@ function SchoolCrest({ size = 40 }: { size?: number }) {
   );
 }
 
-export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
+/** Collapsing is a user action, never an automatic one — the rail only appears
+ *  after the header toggle is pressed. */
+export function Sidebar() {
+  const collapsed = useAppStore((s) => s.sidebarCollapsed);
+  const toggleSidebar = useAppStore((s) => s.toggleSidebar);
+
   if (collapsed) {
     return (
       <aside className="flex w-16 shrink-0 flex-col items-center justify-between rounded-card bg-surface p-3 shadow-panel">
@@ -75,8 +80,10 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
           <SchoolCrest size={32} />
           <button
             type="button"
+            onClick={toggleSidebar}
             aria-label="Expand sidebar"
-            className="grid size-8 place-items-center rounded-lg text-muted"
+            aria-expanded={false}
+            className="grid size-8 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-ink"
           >
             <ChevronsRight size={18} />
           </button>
@@ -95,10 +102,12 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
           </div>
           <button
             type="button"
+            onClick={toggleSidebar}
             aria-label="Collapse sidebar"
+            aria-expanded
             className="text-muted transition-colors hover:text-ink"
           >
-            <PanelLeft size={18} />
+            <PanelToggleIcon size={20} />
           </button>
         </div>
 
