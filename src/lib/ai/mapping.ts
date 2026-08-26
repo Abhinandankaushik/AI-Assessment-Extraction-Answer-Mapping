@@ -74,10 +74,24 @@ function matchByLabel(
 
   for (const block of blocks) {
     if (block.labelOnSheet) {
-      const questionId = byKey.get(numberKey(block.labelOnSheet));
+      const key = numberKey(block.labelOnSheet);
+      const questionId = byKey.get(key);
       if (questionId) {
         push(questionId, block.id);
         currentQuestionId = questionId;
+        continue;
+      }
+
+      // Students often write the parent number only ("Q.24") on a paper that
+      // prints just sub-parts. When exactly one sub-part is still open that is
+      // unambiguous; when several are, leave it for the semantic pass rather
+      // than guessing which one they meant.
+      const openSubParts = questions.filter(
+        (q) => q.parentNumber === key && q.subLabel && !assigned.has(q.id),
+      );
+      if (openSubParts.length === 1) {
+        push(openSubParts[0].id, block.id);
+        currentQuestionId = openSubParts[0].id;
         continue;
       }
       // A label that matches nothing: could be a misread digit or a genuine

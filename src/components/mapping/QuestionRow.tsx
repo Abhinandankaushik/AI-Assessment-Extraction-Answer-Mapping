@@ -70,7 +70,7 @@ export function QuestionRow({
             )}
             {result?.matchBasis === "semantic" && (
               <span className="t-p5 mt-1 block text-warning">
-                Matched by content — no question number was written
+                Matched by content, not by a written question number
               </span>
             )}
           </span>

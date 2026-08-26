@@ -67,7 +67,7 @@ Identify every distinct ANSWER BLOCK across these pages.
 
 For each block report:
 - "page": which page number it appears on, taken from the list above.
-- "labelOnSheet": the question number the student wrote next to the answer, copied verbatim (for example "Q.1)", "Q 22 (a)", "11 (b)"). Use null when the student wrote no label.
+- "labelOnSheet": the question number the student wrote next to the answer, copied verbatim and IN FULL. Include any sub-part letter belonging to the label even when it sits on the next line or in brackets — write "Q.24) (b)" rather than just "Q.24)", and "Q 22 (a)" rather than "Q 22". Use null only when the student wrote no number at all.
 - "transcription": the handwriting transcribed as accurately as you can. Describe drawings in square brackets, e.g. "[labelled diagram of a nephron]". Keep chemical formulae and equations readable as plain text.
 - "continuesFromPrevPage": true ONLY when the block has no label of its own and continues an answer that began on an earlier page.
 - "lineBoxes": one tight bounding box per written LINE of this answer.
