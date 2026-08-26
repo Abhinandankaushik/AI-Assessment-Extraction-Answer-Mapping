@@ -33,10 +33,11 @@ export async function countPages(file: File): Promise<number> {
   return pages;
 }
 
-/** Wide enough for the model to read handwriting, small enough to stay well
- *  inside request limits once base64-encoded. */
-const TARGET_WIDTH = 1600;
-const QUALITY = 0.92;
+/** Wide enough for the model to read handwriting (~180dpi on A4), small enough
+ *  that a batch of pages stays inside the serverless request body limit once
+ *  base64-encoded. */
+const TARGET_WIDTH = 1500;
+const QUALITY = 0.85;
 
 function encode(canvas: HTMLCanvasElement): string {
   return canvas.toDataURL("image/jpeg", QUALITY);
