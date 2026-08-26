@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { ErrorScreen } from "@/components/loading/ErrorScreen";
 import { ExtractingScreen } from "@/components/loading/ExtractingScreen";
+import { MappingScreen } from "@/components/mapping/MappingScreen";
 import { UploadScreen } from "@/components/upload/UploadScreen";
 import { runPipeline } from "@/lib/pipeline";
 import { useAppStore } from "@/lib/store";
@@ -38,6 +39,7 @@ export default function Home() {
     >
       {phase === "upload" && <UploadScreen />}
       {phase === "extracting" && <ExtractingScreen />}
+      {phase === "mapping" && <MappingScreen />}
       {phase === "error" && <ErrorScreen />}
     </AppShell>
   );
