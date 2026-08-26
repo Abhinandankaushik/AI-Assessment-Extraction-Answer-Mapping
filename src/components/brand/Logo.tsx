@@ -1,29 +1,20 @@
-/** VedaAI mark: dark rounded square with the folded "V", whose left limb
- *  carries a white-to-grey gradient in the source file. */
+import Image from "next/image";
+
+/** The VedaAI mark, exported from the Figma file. Unlike the nav glyphs this
+ *  one is two-tone (dark tile, white "V"), so it is a real image rather than a
+ *  currentColor mask. */
 export function LogoMark({ size = 36 }: { size?: number }) {
-  const gradientId = `veda-v-${size}`;
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden>
-      <defs>
-        <linearGradient
-          id={gradientId}
-          x1="30"
-          y1="24"
-          x2="46"
-          y2="80"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset="0" stopColor="#ffffff" />
-          <stop offset="0.5" stopColor="#ffffff" />
-          <stop offset="1" stopColor="#c7c7c7" />
-        </linearGradient>
-      </defs>
-      <rect width="100" height="100" rx="23" fill="var(--color-dark)" />
-      <path
-        d="M17 22h30l7.5 34L69 22h14L59.5 77.5a5 5 0 0 1-4.6 3h-6.6a5 5 0 0 1-4.6-3L17 22Z"
-        fill={`url(#${gradientId})`}
-      />
-    </svg>
+    <Image
+      src="/icons/vedaai-mark.png"
+      alt=""
+      aria-hidden
+      width={40}
+      height={40}
+      priority
+      className="shrink-0 select-none"
+      style={{ width: size, height: size }}
+    />
   );
 }
 
