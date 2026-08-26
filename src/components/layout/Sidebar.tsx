@@ -1,24 +1,22 @@
 "use client";
 
-import {
-  ChevronsRight,
-  ClipboardList,
-  FileText,
-  LayoutGrid,
-  MonitorPlay,
-  PieChart,
-  Settings,
-  Sparkles,
-} from "lucide-react";
+import { ChevronsRight, Settings, Sparkles } from "lucide-react";
 import { LogoMark, PanelToggleIcon, Wordmark } from "@/components/brand/Logo";
+import {
+  AssignmentsIcon,
+  ClassroomIcon,
+  ExamsIcon,
+  HomeIcon,
+  LibraryIcon,
+} from "@/components/brand/NavIcons";
 import { useAppStore } from "@/lib/store";
 
 const NAV = [
-  { label: "Home", icon: LayoutGrid },
-  { label: "My Classroom", icon: MonitorPlay },
-  { label: "Assignments", icon: FileText },
-  { label: "Exams", icon: ClipboardList },
-  { label: "My Library", icon: PieChart },
+  { label: "Home", icon: HomeIcon },
+  { label: "My Classroom", icon: ClassroomIcon },
+  { label: "Assignments", icon: AssignmentsIcon },
+  { label: "Exams", icon: ExamsIcon },
+  { label: "My Library", icon: LibraryIcon },
 ] as const;
 
 const ACTIVE = "Exams";
