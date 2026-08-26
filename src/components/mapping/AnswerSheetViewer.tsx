@@ -7,6 +7,19 @@ import type { AnswerRegion } from "@/lib/types";
 
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
+/**
+ * `offsetTop` is measured against the nearest *positioned* ancestor, which here
+ * is the app shell rather than this scroller — using it sent the view past the
+ * answer. Measuring through rects is correct no matter what is positioned.
+ */
+function topWithinScroller(container: HTMLElement, el: HTMLElement): number {
+  return (
+    el.getBoundingClientRect().top -
+    container.getBoundingClientRect().top +
+    container.scrollTop
+  );
+}
+
 export function AnswerSheetViewer() {
   const { answerPages, blocks, results, questions, selectedQuestionId } =
     useAppStore();
@@ -48,8 +61,20 @@ export function AnswerSheetViewer() {
     const container = scrollRef.current;
     if (!pageEl || !container) return;
 
+    const pageTop = topWithinScroller(container, pageEl);
+    const pageHeight = pageEl.getBoundingClientRect().height;
+    const highlightTop = pageTop + first.box.y * pageHeight;
+    const highlightHeight = first.box.h * pageHeight;
+    const viewport = container.clientHeight;
+
+    // Centre a short answer; pin a tall one near the top so its start is visible.
+    const inset =
+      highlightHeight < viewport * 0.7
+        ? Math.max(24, (viewport - highlightHeight) / 2)
+        : 72;
+
     container.scrollTo({
-      top: Math.max(0, pageEl.offsetTop + first.box.y * pageEl.offsetHeight - 72),
+      top: Math.max(0, highlightTop - inset),
       behavior: "smooth",
     });
   }, [selected, zoom]);
@@ -57,10 +82,12 @@ export function AnswerSheetViewer() {
   const handleScroll = useCallback(() => {
     const container = scrollRef.current;
     if (!container) return;
-    const mid = container.scrollTop + container.clientHeight / 2;
+    const mid = container.clientHeight / 2;
     let page = 1;
     pageRefs.current.forEach((el, index) => {
-      if (el && el.offsetTop <= mid) page = index + 1;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top - container.getBoundingClientRect().top;
+      if (top <= mid) page = index + 1;
     });
     setCurrentPage(page);
   }, []);
@@ -68,7 +95,12 @@ export function AnswerSheetViewer() {
   const goToPage = (page: number) => {
     const clamped = Math.min(answerPages.length, Math.max(1, page));
     const el = pageRefs.current[clamped - 1];
-    scrollRef.current?.scrollTo({ top: el?.offsetTop ?? 0, behavior: "smooth" });
+    const container = scrollRef.current;
+    if (!el || !container) return;
+    container.scrollTo({
+      top: Math.max(0, topWithinScroller(container, el) - 16),
+      behavior: "smooth",
+    });
   };
 
   return (
