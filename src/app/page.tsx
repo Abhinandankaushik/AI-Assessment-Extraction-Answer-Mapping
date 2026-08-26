@@ -1,19 +1,15 @@
+"use client";
+
 import { AppShell } from "@/components/layout/AppShell";
+import { useAppStore } from "@/lib/store";
+import { UploadScreen } from "@/components/upload/UploadScreen";
 
 export default function Home() {
+  const phase = useAppStore((s) => s.phase);
+
   return (
-    <AppShell>
-      <div className="grid h-full place-items-center">
-        <div className="text-center">
-          <h1 className="t-h1">
-            <span className="text-dark">Upload </span>
-            <span className="rounded-lg bg-brand/15 px-2 text-brand">
-              Question Paper &amp; Answer Sheets
-            </span>
-          </h1>
-          <p className="t-p1 mt-2 text-ink">Upload both files to get started</p>
-        </div>
-      </div>
+    <AppShell collapsed={phase !== "upload"}>
+      {phase === "upload" && <UploadScreen />}
     </AppShell>
   );
 }

@@ -13,7 +13,7 @@ export function AppShell({
 }) {
   return (
     <div
-      className="relative min-h-dvh overflow-hidden p-3"
+      className="relative h-dvh overflow-hidden"
       style={{
         background:
           variant === "mapping" ? "var(--bg-mapping)" : "var(--bg-page)",
@@ -25,7 +25,8 @@ export function AppShell({
           className="pointer-events-none absolute top-[86.3%] left-[15.8%] h-[54.4%] w-[91.5%] rounded-[50%] bg-[#171717]/40 blur-[110px]"
         />
       )}
-      <div className="relative mx-auto flex h-[calc(100dvh-24px)] max-w-[1440px] gap-3">
+      {/* 1440 frame with 12px inset — yields a 1100px content column, matching Figma. */}
+      <div className="relative mx-auto flex h-full max-w-[1440px] gap-3 p-3">
         <div className="hidden md:flex">
           <Sidebar collapsed={collapsed} />
         </div>
