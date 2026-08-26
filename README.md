@@ -132,5 +132,6 @@ answers run across page breaks.
   either one PDF or any number of images — not a mix.
 - Everything is in memory — no database, no auth, and a page refresh clears the
   run, which is the brief's stated expectation.
-- `/debug/boxes` and `/debug/mapping` are development harnesses, not part of the
-  product flow.
+- `/debug/boxes` and `/debug/mapping` are development harnesses. They exist to
+  exercise the UI without spending API quota and are served as 404 on any
+  production build, so they are not reachable on the deployed site.
