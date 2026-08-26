@@ -69,12 +69,12 @@ export function DropZone({
         setDragging(false);
         accept(e.dataTransfer.files);
       }}
-      className={`relative grid h-[127px] flex-none place-items-center rounded-drop border-[1.5px] border-dashed bg-surface px-2.5 py-4 transition-colors md:h-[181px] md:flex-1 md:p-2.5 ${
+      className={`relative grid h-[127px] flex-none place-items-center overflow-hidden rounded-drop border-[1.5px] border-dashed bg-surface px-2.5 py-4 transition-colors md:h-[181px] md:flex-1 md:p-2.5 ${
         dragging ? "border-brand bg-brand/5" : "border-hairline"
       }`}
     >
       {files.length > 0 ? (
-        <div className="flex h-full w-full flex-col justify-center gap-2 px-1">
+        <>
           {single ? (
             // 66px tall, r12, padding 12/20/12/12, gap 12 — read off the frame.
             <div className="relative mx-auto flex max-w-full items-center gap-3 rounded-xl bg-surface-2 py-3 pr-5 pl-3">
@@ -96,9 +96,11 @@ export function DropZone({
               </button>
             </div>
           ) : (
-            <>
-              <div className="flex items-center justify-between px-1">
-                <p className="t-p5 font-bold text-dark">
+            // Pinned to the card so the list can never spill past the dashed
+            // border: a definite height is what lets the middle pane scroll.
+            <div className="absolute inset-0 flex flex-col gap-1.5 p-3">
+              <div className="flex shrink-0 items-center justify-between gap-2 px-1">
+                <p className="t-p5 truncate font-bold text-dark">
                   {plural(files.length, "image")} &nbsp;•&nbsp;{" "}
                   {formatBytes(totalBytes)} &nbsp;•&nbsp;{" "}
                   {plural(totalPages, "Page")}
@@ -106,7 +108,7 @@ export function DropZone({
                 <button
                   type="button"
                   onClick={() => onClear(kind)}
-                  className="t-p5 text-muted underline underline-offset-2 hover:text-ink"
+                  className="t-p5 shrink-0 text-muted underline underline-offset-2 hover:text-ink"
                 >
                   Clear all
                 </button>
@@ -115,7 +117,7 @@ export function DropZone({
                 {files.map((file, index) => (
                   <li
                     key={file.id}
-                    className="flex items-center gap-2 rounded-lg bg-surface-2 py-1.5 pr-1.5 pl-2.5"
+                    className="flex items-center gap-2 rounded-lg bg-surface-2 py-1 pr-1 pl-2.5"
                   >
                     <span className="t-p5 w-5 shrink-0 text-muted tabular-nums">
                       {index + 1}.
@@ -136,13 +138,13 @@ export function DropZone({
               </ul>
               <label
                 htmlFor={inputId}
-                className="t-p5 cursor-pointer px-1 text-brand hover:underline"
+                className="t-p5 shrink-0 cursor-pointer px-1 text-brand hover:underline"
               >
                 + Add more pages
               </label>
-            </>
+            </div>
           )}
-        </div>
+        </>
       ) : (
         <label
           htmlFor={inputId}
