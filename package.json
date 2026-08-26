@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "samples": "node scripts/generate-question-paper.mjs",
-    "illustration": "node scripts/prepare-illustration.mjs"
+    "illustration": "node scripts/prepare-illustration.mjs",
+    "icons": "node scripts/normalise-nav-icons.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.19.0",

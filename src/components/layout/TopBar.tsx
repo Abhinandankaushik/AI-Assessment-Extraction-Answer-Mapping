@@ -5,9 +5,9 @@ import {
   Bell,
   ChevronDown,
   CircleQuestionMark,
-  ClipboardList,
   Sparkles,
 } from "lucide-react";
+import { ExamsIcon } from "@/components/brand/NavIcons";
 
 function Avatar({ size = 32 }: { size?: number }) {
   return (
@@ -35,7 +35,7 @@ export function TopBar({ title = "Exams" }: { title?: string }) {
           <ArrowLeft size={20} />
         </button>
         <span className="flex min-w-0 items-center gap-2 text-muted">
-          <ClipboardList size={16} className="shrink-0" />
+          <ExamsIcon size={16} className="shrink-0" />
           <span className="t-p4 truncate">{title}</span>
         </span>
       </div>

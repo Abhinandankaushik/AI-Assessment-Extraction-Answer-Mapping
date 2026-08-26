@@ -3,122 +3,51 @@ interface IconProps {
   className?: string;
 }
 
-/** Sidebar icons traced from the Figma file rather than approximated with a
- *  stock set — the classroom and library glyphs in particular have no close
- *  equivalent in lucide. */
-function Svg({
-  size = 20,
-  className,
-  children,
-}: IconProps & { children: React.ReactNode }) {
+/**
+ * Sidebar icons exported straight from the Figma file. They are monochrome
+ * greyscale-with-alpha PNGs, so they are painted as a CSS mask rather than an
+ * <img>: that way the glyph still inherits `currentColor` and picks up the
+ * muted/active states the nav already uses.
+ */
+function MaskIcon({ src, size = 20, className }: IconProps & { src: string }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
+    <span
       aria-hidden
-    >
-      {children}
-    </svg>
+      className={className}
+      style={{
+        display: "inline-block",
+        width: size,
+        height: size,
+        backgroundColor: "currentColor",
+        WebkitMaskImage: `url(${src})`,
+        maskImage: `url(${src})`,
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+      }}
+    />
   );
 }
 
 export function HomeIcon(props: IconProps) {
-  return (
-    <Svg {...props}>
-      <rect x="3" y="3" width="7.6" height="7.6" rx="1.9" />
-      <rect x="13.4" y="3" width="7.6" height="7.6" rx="1.9" />
-      <rect x="3" y="13.4" width="7.6" height="7.6" rx="1.9" />
-      <rect x="13.4" y="13.4" width="7.6" height="7.6" rx="1.9" />
-    </Svg>
-  );
+  return <MaskIcon src="/icons/nav-home.png" {...props} />;
 }
 
-export function ClassroomIcon({ size = 20, className }: IconProps) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      className={className}
-      aria-hidden
-    >
-      <rect
-        x="2.5"
-        y="4"
-        width="19"
-        height="16"
-        rx="3.2"
-        fill="currentColor"
-      />
-      <circle cx="15.2" cy="9.6" r="2.3" fill="#fff" />
-      <path
-        d="M2.5 12.4c3.4-.4 6 1.3 7.7 4.2"
-        fill="none"
-        stroke="#fff"
-        strokeWidth="2.1"
-        strokeLinecap="round"
-      />
-      <path d="M15.4 16.2l2.6 3.8h-3.4l.8-3.8Z" fill="#fff" />
-    </svg>
-  );
+export function ClassroomIcon(props: IconProps) {
+  return <MaskIcon src="/icons/nav-classroom.png" {...props} />;
 }
 
 export function AssignmentsIcon(props: IconProps) {
-  return (
-    <Svg {...props}>
-      <path d="M13.6 3H8a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3V8.4L13.6 3Z" />
-      <path d="M13.4 3.2v3.4a1.8 1.8 0 0 0 1.8 1.8h3.4" />
-      <path d="M9 12.4h.01" />
-      <path d="M11.8 12.4h4.4" />
-      <path d="M9 16.1h7.2" />
-    </Svg>
-  );
+  return <MaskIcon src="/icons/nav-assignments.png" {...props} />;
 }
 
-export function ExamsIcon({ size = 20, className }: IconProps) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      className={className}
-      aria-hidden
-    >
-      <rect
-        x="4.6"
-        y="4.8"
-        width="14.8"
-        height="16.2"
-        rx="3.2"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-      />
-      <rect
-        x="8.4"
-        y="2.4"
-        width="7.2"
-        height="4.8"
-        rx="1.7"
-        fill="currentColor"
-      />
-      <rect x="10.1" y="3.9" width="3.8" height="1.8" rx="0.9" fill="#fff" />
-    </svg>
-  );
+export function ExamsIcon(props: IconProps) {
+  return <MaskIcon src="/icons/nav-exams.png" {...props} />;
 }
 
 export function LibraryIcon(props: IconProps) {
-  return (
-    <Svg {...props}>
-      <path d="M11.4 4.1a8.4 8.4 0 1 0 8.4 8.4" />
-      <path d="M13.6 2.6a8.4 8.4 0 0 1 8 8h-8v-8Z" />
-    </Svg>
-  );
+  return <MaskIcon src="/icons/nav-library.png" {...props} />;
 }
