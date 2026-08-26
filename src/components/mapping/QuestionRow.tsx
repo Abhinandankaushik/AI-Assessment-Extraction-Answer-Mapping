@@ -23,7 +23,6 @@ function Badge({ n, active }: { n: string; active: boolean }) {
 }
 
 export function QuestionRow({
-  index,
   question,
   result,
   active,
@@ -31,7 +30,6 @@ export function QuestionRow({
   onSelect,
   onToggle,
 }: {
-  index: number;
   question: ExtractedQuestion;
   result: QuestionResult | undefined;
   active: boolean;
@@ -54,7 +52,12 @@ export function QuestionRow({
           className="flex min-w-0 flex-1 items-start gap-3 text-left"
           aria-current={active ? "true" : undefined}
         >
-          <Badge n={String(index + 1)} active={active} />
+          {/* The paper's own number, not the row position — sub-parts make the
+              two diverge (11(a) and 11(b) are two rows but one printed 11). */}
+          <Badge
+            n={question.parentNumber ?? question.displayNumber}
+            active={active}
+          />
           <span className="min-w-0 flex-1 pt-1">
             <span className="t-p3 block text-ink">
               {question.subLabel && (

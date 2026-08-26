@@ -39,7 +39,9 @@ export function AnswerSheetViewer() {
     const regions = result.blockIds.flatMap(
       (id) => blocks.find((b) => b.id === id)?.regions ?? [],
     );
-    return { label: question?.displayNumber ?? "", regions };
+    // Papers print "25." or "22 (a)"; the tag reads better as Q25 / Q22 (a).
+    const printed = question?.displayNumber?.trim().replace(/[.)\s]+$/, "");
+    return { label: printed ? `Q${printed}` : "", regions };
   }, [selectedQuestionId, results, questions, blocks]);
 
   const regionsByPage = useMemo(() => {

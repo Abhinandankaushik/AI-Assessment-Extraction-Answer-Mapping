@@ -111,10 +111,9 @@ export function QuestionList() {
       <div className="min-h-0 flex-1 overflow-y-auto pr-1 pb-4">
         <SummaryCard />
         <div className="mt-3 flex flex-col gap-2">
-          {questions.map((question, index) => (
+          {questions.map((question) => (
             <QuestionRow
               key={question.id}
-              index={index}
               question={question}
               result={resultById.get(question.id)}
               active={selectedQuestionId === question.id}
