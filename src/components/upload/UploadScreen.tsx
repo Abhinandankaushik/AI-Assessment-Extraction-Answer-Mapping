@@ -31,36 +31,38 @@ export function UploadScreen() {
 
   return (
     <div className="grid h-full place-items-center overflow-y-auto px-4 py-4">
-      <div className="flex w-full max-w-[780px] flex-col items-center">
-        <h1 className="t-h1 text-center">
-          <span className="text-dark">Upload </span>
-          <span className="rounded-lg bg-[#FFDECB] px-1.5 text-brand">
-            Question Paper &amp; Answer Sheets
-          </span>
-        </h1>
-        <p className="t-p1 mt-4 text-center text-ink">
-          Upload both files to get started
-        </p>
+      <div className="flex w-full max-w-[789px] flex-col items-center">
+        {/* Hero column: Figma stacks heading, subtitle, artwork and the
+            drop-zone card on a uniform 20px rhythm. */}
+        <div className="flex w-full flex-col items-center gap-5">
+          <h1 className="t-h1 text-center">
+            <span className="text-dark">Upload </span>
+            <span className="rounded-lg bg-[#FFDECB] px-1.5 text-brand">
+              Question Paper &amp; Answer Sheets
+            </span>
+          </h1>
+          <p className="t-p1 text-center text-ink">
+            Upload both files to get started
+          </p>
 
-        <div className="mt-6">
           <HeroIllustration />
-        </div>
 
-        <div className="mt-6 flex w-full gap-2.5 rounded-[24px] p-2.5">
-          <DropZone
-            kind="question"
-            label="Question Paper"
-            file={files.question}
-            onSelect={handleSelect}
-            onRemove={removeFile}
-          />
-          <DropZone
-            kind="answer"
-            label="Answer Sheet"
-            file={files.answer}
-            onSelect={handleSelect}
-            onRemove={removeFile}
-          />
+          <div className="flex h-[205px] w-full gap-4 rounded-[24px] bg-white/50 p-3">
+            <DropZone
+              kind="question"
+              label="Question Paper"
+              file={files.question}
+              onSelect={handleSelect}
+              onRemove={removeFile}
+            />
+            <DropZone
+              kind="answer"
+              label="Answer Sheet"
+              file={files.answer}
+              onSelect={handleSelect}
+              onRemove={removeFile}
+            />
+          </div>
         </div>
 
         <PrimaryButton

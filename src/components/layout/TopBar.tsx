@@ -68,7 +68,7 @@ export function TopBar({ title = "Exams" }: { title?: string }) {
           className="ml-1 flex items-center gap-2 rounded-full py-1 pr-2 pl-1 transition-colors hover:bg-surface-2"
         >
           <Avatar />
-          <span className="t-p4 hidden text-dark sm:block">Madhur Rastogi</span>
+          <span className="t-p4 hidden text-dark sm:block">Abhinandan Kaushik</span>
           <ChevronDown size={16} className="text-ink" />
         </button>
       </div>

@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "samples": "node scripts/generate-question-paper.mjs"
+    "samples": "node scripts/generate-question-paper.mjs",
+    "illustration": "node scripts/prepare-illustration.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.19.0",
