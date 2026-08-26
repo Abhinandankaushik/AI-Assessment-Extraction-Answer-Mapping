@@ -43,13 +43,38 @@ function encode(canvas: HTMLCanvasElement): string {
   return canvas.toDataURL("image/jpeg", QUALITY);
 }
 
+const OPEN_TIMEOUT_MS = 30_000;
+const PAGE_TIMEOUT_MS = 25_000;
+
+/**
+ * A malformed embedded font once put pdf.js into a loop that pinned the tab
+ * until the browser had to be killed. Rendering is bounded so a bad file
+ * surfaces as an error the user can act on instead of a frozen page.
+ */
+function withTimeout<T>(
+  work: Promise<T>,
+  ms: number,
+  what: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race([
+    work,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`${what} timed out — the file may be corrupt`)),
+        ms,
+      );
+    }),
+  ]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
+
 async function rasterizePdf(
   file: File,
   onPage?: (done: number, total: number) => void,
 ): Promise<PageImage[]> {
   const pdfjsLib = await loadPdfjs();
   const task = pdfjsLib.getDocument({ data: await file.arrayBuffer() });
-  const doc = await task.promise;
+  const doc = await withTimeout(task.promise, OPEN_TIMEOUT_MS, "Opening the PDF");
   const pages: PageImage[] = [];
 
   try {
@@ -66,7 +91,13 @@ async function rasterizePdf(
       // Scans are usually white; without this, transparent PDFs render black.
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+      const render = page.render({ canvas, canvasContext: ctx, viewport });
+      try {
+        await withTimeout(render.promise, PAGE_TIMEOUT_MS, `Page ${n}`);
+      } catch (error) {
+        render.cancel();
+        throw error;
+      }
 
       pages.push({
         index: n - 1,
