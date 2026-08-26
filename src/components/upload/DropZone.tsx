@@ -58,11 +58,12 @@ export function DropZone({
       }`}
     >
       {file ? (
-        <div className="relative flex max-w-full items-center gap-3 rounded-card bg-surface px-4 py-3 shadow-[0_8px_24px_0_rgb(0_0_0/0.08)]">
+        <div className="relative flex max-w-full items-center gap-3 rounded-card bg-surface-2 px-4 py-3">
           <PdfIcon />
           <div className="min-w-0">
-            <p className="t-p4 truncate font-medium text-dark">{file.name}</p>
-            <p className="t-meta text-muted/55">
+            <p className="t-p3-bold truncate text-dark">{file.name}</p>
+            {/* Centred under the filename, as in the filled-state frame. */}
+            <p className="t-meta text-center text-muted/55">
               {formatBytes(file.size)} &nbsp;•&nbsp; {plural(file.pageCount, "Page")}
             </p>
           </div>
@@ -70,9 +71,9 @@ export function DropZone({
             type="button"
             onClick={() => onRemove(kind)}
             aria-label={`Remove ${label}`}
-            className="absolute -top-3 -right-3 grid size-6 place-items-center rounded-full bg-ink text-white shadow-md transition-transform hover:scale-110"
+            className="absolute -top-2.5 -right-2.5 grid size-7 place-items-center rounded-full bg-ink text-white transition-transform hover:scale-110"
           >
-            <X size={13} strokeWidth={2.6} />
+            <X size={15} strokeWidth={2.4} />
           </button>
         </div>
       ) : (
