@@ -19,7 +19,7 @@ export default function Home() {
 
   useEffect(() => {
     if (phase !== "extracting" || started.current) return;
-    if (!files.question || !files.answer) return;
+    if (files.question.length === 0 || files.answer.length === 0) return;
 
     started.current = true;
     runPipeline(files.question, files.answer, setProgress)

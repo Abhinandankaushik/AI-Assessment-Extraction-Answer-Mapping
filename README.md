@@ -66,6 +66,7 @@ student's intent, not the OCR quality.
 | Answers matching no question | Collected into an **Unmatched answers** section under the list |
 | Answers spanning pages | `continuesFromPrevPage` blocks join the previous question; the viewer draws a highlight on every page involved |
 | Exact region highlight | Normalised boxes re-projected as percentages over the rendered page |
+| PDF **or images** | Either slot takes one PDF or a stack of page photos; images are ordered numerically (page2 before page10) and flattened into one renumbered page list |
 | Processing progress | Real staged progress (`Reading → Questions → Answers → Mapping`) with a live bar |
 
 ## Running locally
@@ -127,7 +128,8 @@ answers run across page breaks.
 - **Bounding boxes come from the model.** They are consistently tight on clean
   scans; a heavily skewed photograph will loosen them. The union-of-lines step
   and a small padding absorb most of that.
-- Uploads are capped at 10 MB per file, matching the design.
+- Uploads are capped at 10 MB **per file**, matching the design. A slot holds
+  either one PDF or any number of images — not a mix.
 - Everything is in memory — no database, no auth, and a page refresh clears the
   run, which is the brief's stated expectation.
 - `/debug/boxes` and `/debug/mapping` are development harnesses, not part of the

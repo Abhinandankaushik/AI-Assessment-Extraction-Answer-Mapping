@@ -1,6 +1,6 @@
 "use client";
 
-import { isPdf, rasterize, stripDataUrlPrefix } from "./pdf";
+import { isPdf, rasterizeAll, stripDataUrlPrefix } from "./pdf";
 import type { Progress, RunData } from "./store";
 import type {
   AnswerBlock,
@@ -54,21 +54,23 @@ const asPart = (page: PageImage) => ({
 });
 
 export async function runPipeline(
-  questionFile: UploadedFile,
-  answerFile: UploadedFile,
+  questionFiles: UploadedFile[],
+  answerFiles: UploadedFile[],
   onProgress: (progress: Progress) => void,
 ): Promise<RunData> {
   onProgress({ stage: "reading", label: "Reading your files", value: 0.02 });
 
   // Only the answer sheet needs bitmaps — they back both the bounding boxes and
-  // the on-screen viewer. A PDF question paper goes to the model untouched,
-  // which is faster and keeps its vector text crisp.
-  const answerPages = await rasterize(answerFile.file, (done, total) =>
-    onProgress({
-      stage: "reading",
-      label: `Reading answer sheet — page ${done} of ${total}`,
-      value: lerp(SPAN.reading, done / total),
-    }),
+  // the on-screen viewer. A slot may be one PDF or a stack of page photos;
+  // either way it flattens to a single renumbered page list.
+  const answerPages = await rasterizeAll(
+    answerFiles.map((f) => f.file),
+    (done, total) =>
+      onProgress({
+        stage: "reading",
+        label: `Reading answer sheet — page ${done} of ${total}`,
+        value: lerp(SPAN.reading, done / total),
+      }),
   );
 
   onProgress({
@@ -77,14 +79,16 @@ export async function runPipeline(
     value: SPAN.questions[0],
   });
 
-  const questionParts = isPdf(questionFile.file)
-    ? [
-        {
-          mimeType: "application/pdf",
-          data: await fileToBase64(questionFile.file),
-        },
-      ]
-    : (await rasterize(questionFile.file)).map(asPart);
+  // A single PDF goes to the model untouched — faster, and its vector text
+  // stays crisp. Anything else is rasterised first.
+  const singlePdf =
+    questionFiles.length === 1 && isPdf(questionFiles[0].file)
+      ? questionFiles[0].file
+      : null;
+
+  const questionParts = singlePdf
+    ? [{ mimeType: "application/pdf", data: await fileToBase64(singlePdf) }]
+    : (await rasterizeAll(questionFiles.map((f) => f.file))).map(asPart);
 
   const { questions } = await postJson<{ questions: ExtractedQuestion[] }>(
     "/api/extract-questions",

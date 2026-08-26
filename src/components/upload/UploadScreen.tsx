@@ -2,31 +2,44 @@
 
 import { ArrowRight } from "lucide-react";
 import { useCallback } from "react";
-import { countPages } from "@/lib/pdf";
+import { countPages, isPdf } from "@/lib/pdf";
 import { useAppStore } from "@/lib/store";
-import type { UploadKind } from "@/lib/types";
+import type { UploadKind, UploadedFile } from "@/lib/types";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 import { DropZone } from "./DropZone";
 import { HeroIllustration } from "./HeroIllustration";
 
+/** Photographed pages arrive as page1.jpg, page2.jpg, page10.jpg — plain
+ *  alphabetical sorting would place 10 before 2, so compare numerically. */
+const byPageOrder = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
+
 export function UploadScreen() {
-  const { files, setFile, removeFile, setPhase } = useAppStore();
-  const ready = Boolean(files.question && files.answer);
+  const { files, addFiles, removeFile, clearSlot, setPhase } = useAppStore();
+  const ready = files.question.length > 0 && files.answer.length > 0;
 
   const handleSelect = useCallback(
-    async (picked: File, kind: UploadKind) => {
-      const pageCount = await countPages(picked).catch(() => 1);
-      setFile({
-        id: `${kind}-${picked.name}-${picked.lastModified}`,
-        kind,
-        name: picked.name,
-        size: picked.size,
-        mime: picked.type,
-        pageCount,
-        file: picked,
-      });
+    async (picked: File[], kind: UploadKind) => {
+      const ordered = [...picked].sort((a, b) =>
+        byPageOrder.compare(a.name, b.name),
+      );
+      const described: UploadedFile[] = await Promise.all(
+        ordered.map(async (file) => ({
+          id: `${kind}-${file.name}-${file.size}-${file.lastModified}`,
+          kind,
+          name: file.name,
+          size: file.size,
+          mime: file.type,
+          pageCount: await countPages(file).catch(() => 1),
+          isPdf: isPdf(file),
+          file,
+        })),
+      );
+      addFiles(kind, described);
     },
-    [setFile],
+    [addFiles],
   );
 
   return (
@@ -51,16 +64,18 @@ export function UploadScreen() {
             <DropZone
               kind="question"
               label="Question Paper"
-              file={files.question}
+              files={files.question}
               onSelect={handleSelect}
               onRemove={removeFile}
+              onClear={clearSlot}
             />
             <DropZone
               kind="answer"
               label="Answer Sheet"
-              file={files.answer}
+              files={files.answer}
               onSelect={handleSelect}
               onRemove={removeFile}
+              onClear={clearSlot}
             />
           </div>
         </div>

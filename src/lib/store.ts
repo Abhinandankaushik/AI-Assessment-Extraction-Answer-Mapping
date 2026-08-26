@@ -39,14 +39,16 @@ export interface RunData {
 interface AppState extends Omit<RunData, "summary"> {
   summary: GradingSummary | null;
   phase: Phase;
-  files: Record<UploadKind, UploadedFile | null>;
+  /** A slot holds either one PDF or several page images, in page order. */
+  files: Record<UploadKind, UploadedFile[]>;
   progress: Progress;
   error: string | null;
   selectedQuestionId: string | null;
   sidebarCollapsed: boolean;
 
-  setFile: (file: UploadedFile) => void;
-  removeFile: (kind: UploadKind) => void;
+  addFiles: (kind: UploadKind, files: UploadedFile[]) => void;
+  removeFile: (kind: UploadKind, id: string) => void;
+  clearSlot: (kind: UploadKind) => void;
   setPhase: (phase: Phase) => void;
   setProgress: (progress: Progress) => void;
   fail: (message: string) => void;
@@ -58,7 +60,7 @@ interface AppState extends Omit<RunData, "summary"> {
 
 const EMPTY = {
   phase: "upload" as Phase,
-  files: { question: null, answer: null },
+  files: { question: [] as UploadedFile[], answer: [] as UploadedFile[] },
   progress: { stage: "idle" as Stage, label: "", value: 0 },
   error: null,
   answerPages: [],
@@ -74,8 +76,26 @@ const EMPTY = {
 export const useAppStore = create<AppState>((set) => ({
   ...EMPTY,
 
-  setFile: (file) => set((s) => ({ files: { ...s.files, [file.kind]: file } })),
-  removeFile: (kind) => set((s) => ({ files: { ...s.files, [kind]: null } })),
+  // A PDF stands alone; images accumulate and are kept in page order. Mixing
+  // the two in one slot is meaningless, so the newer kind replaces the older.
+  addFiles: (kind, incoming) =>
+    set((s) => {
+      const hasPdf = incoming.some((f) => f.isPdf);
+      const existing = hasPdf || s.files[kind].some((f) => f.isPdf)
+        ? []
+        : s.files[kind];
+      const merged = [...existing, ...incoming].filter(
+        (file, index, all) => all.findIndex((f) => f.id === file.id) === index,
+      );
+      return { files: { ...s.files, [kind]: hasPdf ? incoming.slice(0, 1) : merged } };
+    }),
+
+  removeFile: (kind, id) =>
+    set((s) => ({
+      files: { ...s.files, [kind]: s.files[kind].filter((f) => f.id !== id) },
+    })),
+
+  clearSlot: (kind) => set((s) => ({ files: { ...s.files, [kind]: [] } })),
   setPhase: (phase) => set({ phase }),
   setProgress: (progress) => set({ progress }),
   fail: (message) => set({ phase: "error", error: message }),

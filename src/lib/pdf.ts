@@ -140,6 +140,31 @@ export async function rasterize(
   return isPdf(file) ? rasterizePdf(file, onPage) : rasterizeImage(file);
 }
 
+/**
+ * A slot can be one multi-page PDF or a stack of photographed pages. Both
+ * collapse to a single flat page list here, renumbered so page 3 means the
+ * third page of the answer sheet regardless of which file it came from.
+ */
+export async function rasterizeAll(
+  files: File[],
+  onPage?: (done: number, total: number) => void,
+): Promise<PageImage[]> {
+  const counts = await Promise.all(files.map(countPages));
+  const total = counts.reduce((sum, n) => sum + n, 0);
+
+  const pages: PageImage[] = [];
+  for (const file of files) {
+    const rendered = await rasterize(file, () =>
+      onPage?.(Math.min(total, pages.length + 1), total),
+    );
+    for (const page of rendered) {
+      pages.push({ ...page, index: pages.length });
+      onPage?.(pages.length, total);
+    }
+  }
+  return pages;
+}
+
 export function stripDataUrlPrefix(dataUrl: string): string {
   return dataUrl.slice(dataUrl.indexOf(",") + 1);
 }

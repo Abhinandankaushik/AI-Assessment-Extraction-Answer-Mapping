@@ -9,6 +9,7 @@ export interface UploadedFile {
   size: number;
   mime: string;
   pageCount: number;
+  isPdf: boolean;
   file: File;
 }
 
