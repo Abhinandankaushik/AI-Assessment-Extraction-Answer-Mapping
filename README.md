@@ -84,6 +84,22 @@ Get a free key at <https://aistudio.google.com/apikey>.
 | `npm run samples` | Regenerate the sample question paper PDF |
 | `npm run illustration` | Rebuild the hero artwork from its capture |
 
+## Deploying
+
+Any Next.js host works; this was built for Vercel.
+
+```bash
+vercel login
+vercel link
+vercel env add GEMINI_API_KEY production   # paste the key when prompted
+vercel --prod
+```
+
+The key is only read at request time, so the build itself needs no secrets.
+Both AI routes declare `maxDuration = 60`, which fits inside Vercel's limit —
+question extraction takes roughly 20-30s and each batch of answer pages about
+8-10s.
+
 ## Sample files
 
 `public/samples/` holds a matched pair used for testing:
