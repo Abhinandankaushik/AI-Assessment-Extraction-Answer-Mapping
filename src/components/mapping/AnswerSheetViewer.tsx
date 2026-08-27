@@ -7,11 +7,6 @@ import type { AnswerRegion } from "@/lib/types";
 
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
-/**
- * `offsetTop` is measured against the nearest *positioned* ancestor, which here
- * is the app shell rather than this scroller — using it sent the view past the
- * answer. Measuring through rects is correct no matter what is positioned.
- */
 /** Drops the punctuation a label trails — "25." and "26)" become "25" and "26"
  *  — while leaving a bracketed sub-part like "22 (a)" intact. */
 function trimLabel(label: string): string {
@@ -21,6 +16,11 @@ function trimLabel(label: string): string {
     .replace(/^([^()]*)\)$/, "$1");
 }
 
+/**
+ * `offsetTop` is measured against the nearest *positioned* ancestor, which here
+ * is the app shell rather than this scroller — using it sent the view past the
+ * answer. Measuring through rects is correct no matter what is positioned.
+ */
 function topWithinScroller(container: HTMLElement, el: HTMLElement): number {
   return (
     el.getBoundingClientRect().top -
@@ -88,6 +88,16 @@ export function AnswerSheetViewer() {
           tag: "var(--color-success)",
         };
 
+  // An answer that spans several regions is still one answer: tagging every
+  // rectangle stacks labels on top of each other and buries the handwriting.
+  const firstRegion = useMemo(
+    () =>
+      selected?.regions
+        .slice()
+        .sort((x, y) => x.page - y.page || x.box.y - y.box.y)[0] ?? null,
+    [selected],
+  );
+
   const regionsByPage = useMemo(() => {
     const map = new Map<number, AnswerRegion[]>();
     for (const region of selected?.regions ?? []) {
@@ -99,9 +109,7 @@ export function AnswerSheetViewer() {
   // Selecting a question scrolls the sheet to where that answer actually sits,
   // not just to the top of its page.
   useEffect(() => {
-    const first = selected?.regions
-      .slice()
-      .sort((a, b) => a.page - b.page || a.box.y - b.box.y)[0];
+    const first = firstRegion;
     if (!first) return;
     const pageEl = pageRefs.current[first.page - 1];
     const container = scrollRef.current;
@@ -123,7 +131,7 @@ export function AnswerSheetViewer() {
       top: Math.max(0, highlightTop - inset),
       behavior: "smooth",
     });
-  }, [selected, zoom]);
+  }, [firstRegion, zoom]);
 
   const handleScroll = useCallback(() => {
     const container = scrollRef.current;
@@ -247,12 +255,14 @@ export function AnswerSheetViewer() {
                     backgroundColor: accent.fill,
                   }}
                 >
-                  <span
-                    className="t-p3-bold absolute -top-[30px] left-0 h-[30px] rounded-t-xl px-3 leading-[30px] text-white"
-                    style={{ backgroundColor: accent.tag }}
-                  >
-                    {selected?.label}
-                  </span>
+                  {region === firstRegion && (
+                    <span
+                      className="t-p3-bold absolute -top-[30px] left-0 h-[30px] rounded-t-xl px-3 leading-[30px] text-white"
+                      style={{ backgroundColor: accent.tag }}
+                    >
+                      {selected?.label}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
