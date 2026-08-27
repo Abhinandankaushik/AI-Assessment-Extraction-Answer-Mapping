@@ -23,8 +23,11 @@ export async function POST(request: Request) {
     const questions = await extractQuestions(pages);
     return NextResponse.json({ questions });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Question extraction failed";
+    // The stage is part of the message so the error screen says which step
+    // of the run gave up, not just that something did.
+    const message = `Reading the question paper: ${
+      error instanceof Error ? error.message : "it failed"
+    }`;
     console.error("[extract-questions]", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }

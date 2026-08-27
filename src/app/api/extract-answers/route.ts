@@ -37,8 +37,11 @@ export async function POST(request: Request) {
     );
     return NextResponse.json({ blocks });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Answer extraction failed";
+    // The stage is part of the message so the error screen says which step
+    // of the run gave up, not just that something did.
+    const message = `Reading the answer sheet: ${
+      error instanceof Error ? error.message : "it failed"
+    }`;
     console.error("[extract-answers]", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }

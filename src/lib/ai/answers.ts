@@ -1,6 +1,11 @@
 import { Type } from "@google/genai";
 import type { AnswerBlock, AnswerPart, BBox } from "@/lib/types";
-import { ThinkingLevel, generateJson, type ImagePart } from "./client";
+import {
+  ResponseTruncatedError,
+  ThinkingLevel,
+  generateJson,
+  type ImagePart,
+} from "./client";
 
 const SYSTEM =
   "You read scanned handwritten student answer sheets. You transcribe what is " +
@@ -215,7 +220,35 @@ export function buildParts(
   return parts;
 }
 
+const byReadingOrder = (a: AnswerBlock, b: AnswerBlock) =>
+  a.regions[0].page - b.regions[0].page || a.regions[0].box.y - b.regions[0].box.y;
+
+/**
+ * Pages ride together to save quota, but a batch of dense handwriting can want
+ * more room than one reply has. When that happens the batch is halved and each
+ * half asked separately — a couple more requests, against a run that would
+ * otherwise fail outright.
+ */
 export async function extractAnswersFromPages(
+  images: ImagePart[],
+  pageNumbers: number[],
+  totalPages: number,
+): Promise<AnswerBlock[]> {
+  try {
+    return await readBatch(images, pageNumbers, totalPages);
+  } catch (error) {
+    if (!(error instanceof ResponseTruncatedError) || images.length < 2) throw error;
+
+    const half = Math.ceil(images.length / 2);
+    const halves = await Promise.all([
+      extractAnswersFromPages(images.slice(0, half), pageNumbers.slice(0, half), totalPages),
+      extractAnswersFromPages(images.slice(half), pageNumbers.slice(half), totalPages),
+    ]);
+    return halves.flat().sort(byReadingOrder);
+  }
+}
+
+async function readBatch(
   images: ImagePart[],
   pageNumbers: number[],
   totalPages: number,
@@ -251,9 +284,5 @@ export async function extractAnswersFromPages(
       } satisfies AnswerBlock;
     })
     .filter((b): b is AnswerBlock => b !== null)
-    .sort(
-      (a, b) =>
-        a.regions[0].page - b.regions[0].page ||
-        a.regions[0].box.y - b.regions[0].box.y,
-    );
+    .sort(byReadingOrder);
 }

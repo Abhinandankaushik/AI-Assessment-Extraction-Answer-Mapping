@@ -40,8 +40,11 @@ export async function POST(request: Request) {
       orphanBlockIds: outcome.orphanBlockIds,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Mapping and grading failed";
+    // The stage is part of the message so the error screen says which step
+    // of the run gave up, not just that something did.
+    const message = `Matching and marking the answers: ${
+      error instanceof Error ? error.message : "it failed"
+    }`;
     console.error("[map-and-grade]", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
