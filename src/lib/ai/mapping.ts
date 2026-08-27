@@ -49,7 +49,7 @@ const SCHEMA = {
  * the request count (and therefore the free-tier quota) down and stops the
  * model from second-guessing a label the student wrote themselves.
  */
-function matchByLabel(
+export function matchByLabel(
   questions: ExtractedQuestion[],
   blocks: AnswerBlock[],
 ): {

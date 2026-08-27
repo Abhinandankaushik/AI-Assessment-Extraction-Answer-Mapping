@@ -84,6 +84,15 @@ Get a free key at <https://aistudio.google.com/apikey>.
 | `npm run dev` | Dev server |
 | `npm run samples` | Regenerate the sample question paper PDF |
 | `npm run illustration` | Rebuild the hero artwork from its capture |
+| `npm test` | Unit tests for the numbering, geometry and mapping logic |
+
+## Tests
+
+`npm test` covers the three pure functions where a mistake is silent rather
+than loud — question-number normalisation, the union of line boxes into the
+rectangle the UI draws, and the deterministic label pass. Between them they
+pin the requirements that are easiest to regress: out-of-order answers,
+multi-page answers, sub-parts, and answers that match no question.
 
 ## Deploying
 
