@@ -54,6 +54,7 @@ const SCHEMA = {
           transcription: { type: Type.STRING },
           continuesFromPrevPage: { type: Type.BOOLEAN },
           lineBoxes: { type: Type.ARRAY, items: BOX },
+          blockBox: BOX,
           parts: { type: Type.ARRAY, items: PART },
         },
         required: ["page", "transcription", "continuesFromPrevPage", "lineBoxes"],
@@ -81,6 +82,7 @@ interface RawBlock {
   transcription: string;
   continuesFromPrevPage: boolean;
   lineBoxes: RawBox[];
+  blockBox?: RawBox | null;
   parts?: RawPart[] | null;
 }
 
@@ -98,6 +100,7 @@ For each block report:
 - "transcription": the handwriting transcribed as accurately as you can. Describe drawings in square brackets, e.g. "[labelled diagram of a nephron]". Keep chemical formulae and equations readable as plain text. Keep any sub-part marker the student wrote at the start of a line, such as "(a)" or "(b)".
 - "continuesFromPrevPage": true ONLY when the block has no label of its own and continues an answer that began on an earlier page.
 - "lineBoxes": one tight bounding box per written LINE of this block, in the order written.
+- "blockBox": ONE box around the whole block, from the top of its first line to the bottom of its last. Give this for every block.
 - "parts": include this ONLY when the student split this one answer into marked sub-parts such as "(a)" and "(b)", or "(i)" and "(ii)". Give one entry per marker: "marker" is the letter or numeral alone ("a", "b", "ii"), and "firstLine" is the 0-based index into "lineBoxes" of the line that marker starts on. Omit the field entirely when the answer has no such markers.
 
 Bounding boxes use integers from 0 to 1000, normalised to the page image the block is on,
@@ -108,6 +111,7 @@ Rules for "lineBoxes" — these decide whether the answer is highlighted correct
 - The FIRST box must reach left far enough to include the question number the student wrote beside the answer, so the number is highlighted along with the answer it belongs to.
 - Boxes must wrap the handwriting tightly. Never return a box covering the whole page.
 - Check the last line before you finish: if the block's transcription ends with a line that has no box, add it.
+- "blockBox" must reach the bottom of the last written line. It is the answer to "where does this whole answer sit", and it is what catches a line the list above missed.
 
 Other rules:
 - Group consecutive lines belonging to the same answer into ONE block. Do not emit one block per line.
@@ -145,6 +149,37 @@ export function unionBoxes(boxes: RawBox[], padding = 0.008): BBox | null {
   };
 }
 
+/** The furthest a block box may push a highlight past its last line box, as a
+ *  fraction of page height — about four written lines. */
+const REACH = 0.12;
+
+/**
+ * Widens the union of the line boxes down to the block box the model also
+ * reported.
+ *
+ * The two are asked for independently, and the model is markedly better at
+ * "where does this answer sit" than at remembering to emit a box for the final
+ * line — which is how a highlight came to stop two lines short of the answer it
+ * was pointing at.
+ *
+ * Only the bottom edge moves. The line boxes decide where an answer starts, and
+ * a block box that has drifted upward would drag the highlight over whatever was
+ * written above — someone else's answer. The reach is capped for the same
+ * reason: recovering a few missed lines is worth it, swallowing half the page
+ * is not.
+ */
+export function widen(lines: BBox | null, block: BBox | null): BBox | null {
+  if (!lines) return block;
+  if (!block) return lines;
+
+  const bottom = Math.min(
+    Math.max(lines.y + lines.h, block.y + block.h),
+    lines.y + lines.h + REACH,
+    1,
+  );
+  return { ...lines, h: bottom - lines.y };
+}
+
 /** Where a sub-part marker sits in the block's own transcription, searched
  *  forwards so "(b)" is found after "(a)" rather than anywhere on the line. */
 function markerAt(text: string, marker: string, from: number): number {
@@ -167,6 +202,7 @@ export function buildParts(
   lineBoxes: RawBox[],
   transcription: string,
   page: number,
+  blockBox: BBox | null = null,
 ): AnswerPart[] {
   const cleaned = (raw ?? []).map((part) => ({
     marker: String(part?.marker ?? "")
@@ -210,7 +246,10 @@ export function buildParts(
       .trim();
 
     const to = cleaned[i + 1]?.firstLine ?? lineBoxes.length;
-    const box = unionBoxes(lineBoxes.slice(fromLine, to));
+    const lines = unionBoxes(lineBoxes.slice(fromLine, to));
+    // Only the closing part can be short at the bottom, so only it is widened.
+    const last = i === cleaned.length - 1;
+    const box = last ? widen(lines, blockBox) : lines;
     if (!box || !text) return [];
 
     parts.push({ marker: part.marker, transcription: text, regions: [{ page, box }] });
@@ -266,13 +305,20 @@ async function readBatch(
   return (result.blocks ?? [])
     .map((block, index) => {
       const lineBoxes = block.lineBoxes ?? [];
-      const box = unionBoxes(lineBoxes);
+      const blockBox = block.blockBox ? unionBoxes([block.blockBox]) : null;
+      const box = widen(unionBoxes(lineBoxes), blockBox);
       const transcription = block.transcription?.trim() ?? "";
       if (!box || !transcription) return null;
 
       const page = allowed.has(block.page) ? block.page : pageNumbers[0];
       const label = block.labelOnSheet?.trim();
-      const parts = buildParts(block.parts, lineBoxes, transcription, page);
+      const parts = buildParts(
+        block.parts,
+        lineBoxes,
+        transcription,
+        page,
+        blockBox,
+      );
 
       return {
         id: `p${page}b${index + 1}`,

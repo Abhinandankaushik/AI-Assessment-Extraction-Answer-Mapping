@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BBox } from "@/lib/types";
-import { buildParts, unionBoxes } from "./answers";
+import { buildParts, unionBoxes, widen } from "./answers";
 
 const box = (ymin: number, xmin: number, ymax: number, xmax: number) => ({
   ymin,
@@ -144,5 +144,36 @@ describe("buildParts", () => {
     // A mis-sliced part highlights the wrong lines, which is worse than not
     // splitting the answer at all.
     expect(buildParts(raw, rows(2), TEXT, 1)).toEqual([]);
+  });
+});
+
+describe("widen", () => {
+  const lines = { x: 0.1, y: 0.1, w: 0.7, h: 0.2 };
+
+  it("takes in a last line the per-line boxes missed", () => {
+    // The model reliably says where a whole answer sits; it is remembering a box
+    // for the final line that it drops, which cut highlights short.
+    expect(widen(lines, { x: 0.1, y: 0.1, w: 0.7, h: 0.26 })).toEqual({
+      x: 0.1,
+      y: 0.1,
+      w: 0.7,
+      h: 0.26,
+    });
+  });
+
+  it("never lets a block box move the top or the sides", () => {
+    // A box that drifted upward would drag the highlight over the answer above.
+    expectBox(widen(lines, { x: 0, y: 0, w: 1, h: 0.32 }), { ...lines, h: 0.22 });
+  });
+
+  it("caps how far a block box may reach past the last line", () => {
+    // Recovering a few missed lines is worth it; swallowing half the page is not.
+    expectBox(widen(lines, { x: 0, y: 0, w: 1, h: 1 }), { ...lines, h: 0.32 });
+  });
+
+  it("falls back to whichever box it was given", () => {
+    expect(widen(null, lines)).toEqual(lines);
+    expect(widen(lines, null)).toEqual(lines);
+    expect(widen(null, null)).toBeNull();
   });
 });
