@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AnswerBlock, ExtractedQuestion } from "@/lib/types";
 import { parseQuestionNumber } from "./numbering";
-import { matchByLabel } from "./mapping";
+import { matchByLabel, snapGroups, type QuestionMatch } from "./mapping";
 
 function question(displayNumber: string, index: number): ExtractedQuestion {
   const { parentNumber, subLabel } = parseQuestionNumber(displayNumber);
@@ -147,5 +147,98 @@ describe("matchByLabel", () => {
 
     expect(assigned.size).toBe(0);
     expect(leftovers.map((b) => b.id)).toEqual(["b1", "b2"]);
+  });
+});
+
+/** One line of a written answer the student split into "(a)" and "(b)". */
+function part(
+  id: string,
+  groupId: string,
+  marker: string,
+  labelOnSheet: string | null,
+  y = 0.1,
+): AnswerBlock {
+  return {
+    id,
+    labelOnSheet,
+    transcription: `answer part ${marker}`,
+    regions: [{ page: 1, box: { x: 0.1, y, w: 0.5, h: 0.05 } }],
+    continuesFromPrevPage: false,
+    groupId,
+    partMarker: marker,
+  };
+}
+
+describe("matchByLabel with grouped parts", () => {
+  it("hands each part of one answer to its own sub-question", () => {
+    const questions = ["26 (a)", "26 (b)"].map(question);
+    const { assigned, leftovers } = matchByLabel(questions, [
+      part("g1_1", "g1", "a", "Q.26)"),
+      part("g1_2", "g1", "b", "(b)", 0.2),
+    ]);
+
+    expect(assigned.get("q0")).toEqual(["g1_1"]);
+    expect(assigned.get("q1")).toEqual(["g1_2"]);
+    expect(leftovers).toEqual([]);
+  });
+
+  it("distributes a group even when the student wrote the exact sub-part", () => {
+    const questions = ["26 (a)", "26 (b)"].map(question);
+    const { assigned } = matchByLabel(questions, [
+      part("g1_1", "g1", "a", "Q.26)(a)"),
+      part("g1_2", "g1", "b", "(b)", 0.2),
+    ]);
+
+    expect(assigned.get("q0")).toEqual(["g1_1"]);
+    expect(assigned.get("q1")).toEqual(["g1_2"]);
+  });
+
+  it("does not bury an unnumbered group under the answer above it", () => {
+    // The head's "(a)" names a part, not a question: reading it as a
+    // continuation would file this whole answer under 25.
+    const questions = ["25", "26 (a)", "26 (b)"].map(question);
+    const { assigned, leftovers } = matchByLabel(questions, [
+      block("b1", "Q.25)"),
+      part("g1_1", "g1", "a", "(a)", 0.4),
+      part("g1_2", "g1", "b", "(b)", 0.5),
+    ]);
+
+    expect(assigned.get("q0")).toEqual(["b1"]);
+    expect(leftovers.map((b) => b.id)).toEqual(["g1_1", "g1_2"]);
+  });
+});
+
+describe("snapGroups", () => {
+  it("pulls the rest of a group in once one part has found its question", () => {
+    const questions = ["26 (a)", "26 (b)"].map(question);
+    const blocks = [
+      part("g1_1", "g1", "a", "(a)"),
+      part("g1_2", "g1", "b", "(b)", 0.2),
+    ];
+    const matches: QuestionMatch[] = [
+      { questionId: "q0", blockIds: ["g1_1"], basis: "semantic", confidence: 0.8 },
+    ];
+
+    const orphans = snapGroups(questions, blocks, matches, ["g1_2"]);
+
+    expect(orphans).toEqual([]);
+    expect(matches.map((m) => [m.questionId, m.blockIds])).toEqual([
+      ["q0", ["g1_1"]],
+      ["q1", ["g1_2"]],
+    ]);
+  });
+
+  it("leaves an orphan alone when its sub-question is already answered", () => {
+    const questions = ["26 (a)", "26 (b)"].map(question);
+    const blocks = [
+      part("g1_1", "g1", "a", "(a)"),
+      part("g1_2", "g1", "b", "(b)", 0.2),
+    ];
+    const matches: QuestionMatch[] = [
+      { questionId: "q0", blockIds: ["g1_1"], basis: "semantic", confidence: 0.8 },
+      { questionId: "q1", blockIds: ["other"], basis: "label", confidence: 1 },
+    ];
+
+    expect(snapGroups(questions, blocks, matches, ["g1_2"])).toEqual(["g1_2"]);
   });
 });

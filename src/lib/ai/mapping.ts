@@ -43,6 +43,17 @@ const SCHEMA = {
   required: ["matches"],
 } as const;
 
+/** Consecutive parts of one written answer, kept together for matching. */
+function groupUnits(blocks: AnswerBlock[]): AnswerBlock[][] {
+  const units: AnswerBlock[][] = [];
+  for (const block of blocks) {
+    const last = units[units.length - 1];
+    if (block.groupId && last?.[0]?.groupId === block.groupId) last.push(block);
+    else units.push([block]);
+  }
+  return units;
+}
+
 /**
  * Answers that carry a written question number are matched in plain code —
  * that is both exact and free. Only the leftovers reach the model, which keeps
@@ -72,6 +83,31 @@ export function matchByLabel(
     assigned.set(questionId, list);
   };
 
+  const openSibling = (parentNumber: string | null, marker: string | null) =>
+    parentNumber && marker
+      ? questions.find(
+          (q) =>
+            q.parentNumber === parentNumber &&
+            q.subLabel === marker &&
+            !assigned.has(q.id),
+        )
+      : undefined;
+
+  /** Hands each part of one written answer to its own sub-question, falling
+   *  back to the question the group as a whole matched. */
+  const distribute = (
+    unit: AnswerBlock[],
+    parentNumber: string | null,
+    fallbackId: string,
+  ) => {
+    for (const part of unit) {
+      const sibling = openSibling(parentNumber, part.partMarker ?? null);
+      const target = sibling?.id ?? fallbackId;
+      push(target, part.id);
+      currentQuestionId = target;
+    }
+  };
+
   // Blocks arrive in reading order, so "first on its page" identifies text that
   // carried over from the page before.
   const firstOnPage = new Set<string>();
@@ -83,7 +119,38 @@ export function matchByLabel(
     firstOnPage.add(block.id);
   }
 
-  for (const block of blocks) {
+  for (const unit of groupUnits(blocks)) {
+    // A group is one answer the student split at "(a)"/"(b)". It is matched as
+    // a whole, because a bare marker at its head names a part, not a question -
+    // reading it as a continuation would bury the answer under the one above.
+    if (unit.length > 1) {
+      const head = unit[0];
+      const key = head.labelOnSheet ? numberKey(head.labelOnSheet) : null;
+      const exact = key ? byKey.get(key) : undefined;
+
+      if (exact) {
+        const parentNumber =
+          questions.find((q) => q.id === exact)?.parentNumber ?? null;
+        distribute(unit, parentNumber, exact);
+        continue;
+      }
+
+      const openSubParts = key
+        ? questions.filter(
+            (q) => q.parentNumber === key && q.subLabel && !assigned.has(q.id),
+          )
+        : [];
+      if (openSubParts.length > 0) {
+        distribute(unit, key, openSubParts[0].id);
+        continue;
+      }
+
+      currentQuestionId = null;
+      leftovers.push(...unit);
+      continue;
+    }
+
+    const block = unit[0];
     if (block.labelOnSheet) {
       const key = numberKey(block.labelOnSheet);
       const questionId = byKey.get(key);
@@ -241,12 +308,77 @@ Rules:
     orphanBlockIds.push(...leftovers.map((b) => b.id));
   }
 
+  const orphans = snapGroups(questions, blocks, matches, orphanBlockIds);
+
   const answered = new Set(matches.map((m) => m.questionId));
   return {
     matches,
     unansweredQuestionIds: questions
       .filter((q) => !answered.has(q.id))
       .map((q) => q.id),
-    orphanBlockIds,
+    orphanBlockIds: orphans,
   };
+}
+
+/**
+ * The parts of one written answer belong to one question's sub-parts, so once
+ * any part has found its question the rest follow by marker. Without this a
+ * group can end up half matched and half unmatched, which is exactly the case
+ * a teacher then has to fix by hand.
+ *
+ * Mutates `matches`; returns the orphan ids that survive.
+ */
+export function snapGroups(
+  questions: ExtractedQuestion[],
+  blocks: AnswerBlock[],
+  matches: QuestionMatch[],
+  orphanBlockIds: string[],
+): string[] {
+  const groupIds = new Set(
+    blocks.map((b) => b.groupId).filter((id): id is string => Boolean(id)),
+  );
+  if (groupIds.size === 0) return orphanBlockIds;
+
+  const questionById = new Map(questions.map((q) => [q.id, q]));
+  const questionOfBlock = new Map<string, string>();
+  for (const match of matches) {
+    for (const blockId of match.blockIds) {
+      questionOfBlock.set(blockId, match.questionId);
+    }
+  }
+
+  const answered = new Set(matches.map((m) => m.questionId));
+  const orphans = new Set(orphanBlockIds);
+
+  for (const groupId of groupIds) {
+    const parts = blocks.filter((b) => b.groupId === groupId);
+    const anchor = parts
+      .map((p) => questionOfBlock.get(p.id))
+      .find((id): id is string => Boolean(id));
+    const parentNumber = anchor
+      ? questionById.get(anchor)?.parentNumber
+      : null;
+    if (!parentNumber) continue;
+
+    for (const part of parts) {
+      if (!orphans.has(part.id) || !part.partMarker) continue;
+      const sibling = questions.find(
+        (q) =>
+          q.parentNumber === parentNumber &&
+          q.subLabel === part.partMarker &&
+          !answered.has(q.id),
+      );
+      if (!sibling) continue;
+      answered.add(sibling.id);
+      orphans.delete(part.id);
+      matches.push({
+        questionId: sibling.id,
+        blockIds: [part.id],
+        basis: "semantic",
+        confidence: 0.6,
+      });
+    }
+  }
+
+  return [...orphans];
 }
