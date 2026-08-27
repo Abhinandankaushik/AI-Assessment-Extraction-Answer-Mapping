@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BBox } from "@/lib/types";
-import { splitIntoParts, unionBoxes } from "./answers";
+import { buildParts, unionBoxes } from "./answers";
 
 const box = (ymin: number, xmin: number, ymax: number, xmax: number) => ({
   ymin,
@@ -60,63 +60,89 @@ describe("unionBoxes", () => {
   });
 });
 
-const line = (text: string, ymin: number) => ({
-  text,
-  box: { ymin, xmin: 100, ymax: ymin + 30, xmax: 900 },
-});
 
-describe("splitIntoParts", () => {
-  it("splits one written answer at its sub-part markers", () => {
-    const parts = splitIntoParts([
-      line("(a) 2HNO3 + Ca(OH)2 -> Ca(NO3)2 + 2H2O", 100),
-      line("(b) NaCl + AgNO3 -> AgCl + NaNO3", 140),
-    ]);
+const rows = (count: number) =>
+  Array.from({ length: count }, (_, i) => box(100 + i * 40, 100, 130 + i * 40, 900));
+
+describe("buildParts", () => {
+  const TEXT = "(a) 2HNO3 + Ca(OH)2 -> Ca(NO3)2 + 2H2O (b) NaCl + AgNO3 -> AgCl + NaNO3";
+
+  it("gives each marked part the lines it actually covers", () => {
+    const parts = buildParts(
+      [
+        { marker: "a", firstLine: 0 },
+        { marker: "b", firstLine: 1 },
+      ],
+      rows(2),
+      TEXT,
+      10,
+    );
 
     expect(parts.map((p) => p.marker)).toEqual(["a", "b"]);
-    expect(parts[0].lines).toHaveLength(1);
-    // Each part keeps its own lines, so each gets its own tight box.
-    expectBox(unionBoxes(parts[1].lines.map((l) => l.box), 0), {
-      x: 0.1,
-      y: 0.14,
-      w: 0.8,
-      h: 0.03,
+    expect(parts[0].transcription).toBe("(a) 2HNO3 + Ca(OH)2 -> Ca(NO3)2 + 2H2O");
+    expect(parts[1].transcription).toBe("(b) NaCl + AgNO3 -> AgCl + NaNO3");
+    // Part (b) must land on its own line, not the one above it.
+    expectBox(parts[1].regions[0].box, {
+      x: 0.092,
+      y: 0.132,
+      w: 0.816,
+      h: 0.046,
     });
   });
 
-  it("keeps a shared stem with the first part", () => {
-    const parts = splitIntoParts([
-      line("Balanced equations:", 100),
-      line("(a) first reaction", 140),
-      line("(b) second reaction", 180),
-    ]);
+  it("keeps a stem written above the first marker with that part", () => {
+    const parts = buildParts(
+      [
+        { marker: "a", firstLine: 1 },
+        { marker: "b", firstLine: 2 },
+      ],
+      rows(3),
+      "Balanced equations: (a) first reaction (b) second reaction",
+      1,
+    );
 
-    expect(parts).toHaveLength(2);
-    expect(parts[0].lines.map((l) => l.text)).toEqual([
-      "Balanced equations:",
-      "(a) first reaction",
-    ]);
+    expect(parts[0].transcription).toBe("Balanced equations: (a) first reaction");
+    expect(parts[0].regions[0].box.y).toBeCloseTo(0.092, 3);
   });
 
-  it("carries continuation lines into the part above them", () => {
-    const parts = splitIntoParts([
-      line("(a) first reaction", 100),
-      line("giving a white precipitate", 140),
-      line("(b) second reaction", 180),
-    ]);
+  it("carries the lines below a marker into its part", () => {
+    const parts = buildParts(
+      [
+        { marker: "a", firstLine: 0 },
+        { marker: "b", firstLine: 3 },
+      ],
+      rows(4),
+      "(a) first, running over three lines (b) second",
+      1,
+    );
 
-    expect(parts[0].lines).toHaveLength(2);
-    expect(parts[1].lines).toHaveLength(1);
+    expect(parts[0].regions[0].box.h).toBeCloseTo(0.126, 3);
+    expect(parts[1].regions[0].box.h).toBeCloseTo(0.046, 3);
   });
 
-  it("leaves a single-part answer whole", () => {
-    // One leading marker is just how this answer starts, not a group.
-    const parts = splitIntoParts([
-      line("(a) only this part was attempted", 100),
-      line("and it runs onto a second line", 140),
-    ]);
+  it.each([
+    ["a single marker", [{ marker: "a", firstLine: 0 }]],
+    ["no markers", []],
+  ])("reports nothing for %s", (_label, raw) => {
+    expect(buildParts(raw, rows(2), TEXT, 1)).toEqual([]);
+  });
 
-    expect(parts).toHaveLength(1);
-    expect(parts[0].marker).toBeNull();
-    expect(parts[0].lines).toHaveLength(2);
+  it.each([
+    ["line indices that go backwards", [
+      { marker: "a", firstLine: 1 },
+      { marker: "b", firstLine: 0 },
+    ]],
+    ["a line index past the last box", [
+      { marker: "a", firstLine: 0 },
+      { marker: "b", firstLine: 9 },
+    ]],
+    ["a marker missing from the transcription", [
+      { marker: "a", firstLine: 0 },
+      { marker: "c", firstLine: 1 },
+    ]],
+  ])("drops every part on %s", (_label, raw) => {
+    // A mis-sliced part highlights the wrong lines, which is worse than not
+    // splitting the answer at all.
+    expect(buildParts(raw, rows(2), TEXT, 1)).toEqual([]);
   });
 });

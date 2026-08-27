@@ -1,7 +1,6 @@
 import { Type } from "@google/genai";
 import type { AnswerBlock, AnswerPart, BBox } from "@/lib/types";
 import { ThinkingLevel, generateJson, type ImagePart } from "./client";
-import { leadingSubPart } from "./numbering";
 
 const SYSTEM =
   "You read scanned handwritten student answer sheets. You transcribe what is " +
@@ -22,15 +21,21 @@ const BOX = {
   required: ["ymin", "xmin", "ymax", "xmax"],
 } as const;
 
-const LINE = {
+const PART = {
   type: Type.OBJECT,
   properties: {
-    text: { type: Type.STRING },
-    box: BOX,
+    marker: { type: Type.STRING },
+    firstLine: { type: Type.INTEGER },
   },
-  required: ["text", "box"],
+  required: ["marker", "firstLine"],
 } as const;
 
+/**
+ * Field order matters here. The model transcribes the whole block first and
+ * only then lays out the boxes, which is what keeps them aligned: asking for
+ * text and geometry line by line made it emit each box against the line it had
+ * just left, so every highlight sat one line too high and dropped its last line.
+ */
 const SCHEMA = {
   type: Type.OBJECT,
   properties: {
@@ -41,33 +46,37 @@ const SCHEMA = {
         properties: {
           page: { type: Type.INTEGER },
           labelOnSheet: { type: Type.STRING, nullable: true },
+          transcription: { type: Type.STRING },
           continuesFromPrevPage: { type: Type.BOOLEAN },
-          lines: { type: Type.ARRAY, items: LINE },
+          lineBoxes: { type: Type.ARRAY, items: BOX },
+          parts: { type: Type.ARRAY, items: PART },
         },
-        required: ["page", "continuesFromPrevPage", "lines"],
+        required: ["page", "transcription", "continuesFromPrevPage", "lineBoxes"],
       },
     },
   },
   required: ["blocks"],
 } as const;
 
-interface RawBox {
+export interface RawBox {
   ymin: number;
   xmin: number;
   ymax: number;
   xmax: number;
 }
 
-export interface RawLine {
-  text: string;
-  box: RawBox;
+export interface RawPart {
+  marker: string;
+  firstLine: number;
 }
 
 interface RawBlock {
   page: number;
   labelOnSheet?: string | null;
+  transcription: string;
   continuesFromPrevPage: boolean;
-  lines: RawLine[];
+  lineBoxes: RawBox[];
+  parts?: RawPart[] | null;
 }
 
 function buildPrompt(pageNumbers: number[], totalPages: number): string {
@@ -81,17 +90,22 @@ Identify every distinct ANSWER BLOCK across these pages.
 For each block report:
 - "page": which page number it appears on, taken from the list above.
 - "labelOnSheet": the question number the student wrote next to the answer, copied verbatim and IN FULL. Include any sub-part letter belonging to the label even when it sits on the next line or in brackets — write "Q.24) (b)" rather than just "Q.24)", and "Q 22 (a)" rather than "Q 22". Use null only when the student wrote no number at all.
+- "transcription": the handwriting transcribed as accurately as you can. Describe drawings in square brackets, e.g. "[labelled diagram of a nephron]". Keep chemical formulae and equations readable as plain text. Keep any sub-part marker the student wrote at the start of a line, such as "(a)" or "(b)".
 - "continuesFromPrevPage": true ONLY when the block has no label of its own and continues an answer that began on an earlier page.
-- "lines": one entry per written LINE of this answer, in the order written, each with:
-  - "text": that line transcribed as accurately as you can. Keep any sub-part marker the student wrote at the start of a line, such as "(a)" or "(b)". Describe drawings in square brackets, e.g. "[labelled diagram of a nephron]". Keep chemical formulae and equations readable as plain text.
-  - "box": a tight bounding box around that one line.
+- "lineBoxes": one tight bounding box per written LINE of this block, in the order written.
+- "parts": include this ONLY when the student split this one answer into marked sub-parts such as "(a)" and "(b)", or "(i)" and "(ii)". Give one entry per marker: "marker" is the letter or numeral alone ("a", "b", "ii"), and "firstLine" is the 0-based index into "lineBoxes" of the line that marker starts on. Omit the field entirely when the answer has no such markers.
 
 Bounding boxes use integers from 0 to 1000, normalised to the page image the block is on,
 where (xmin, ymin) is the top-left corner and (xmax, ymax) the bottom-right corner.
 
-Rules:
-- Group consecutive lines belonging to the same answer into ONE block, one entry per line inside it.
+Rules for "lineBoxes" — these decide whether the answer is highlighted correctly:
+- Return one box for EVERY line you transcribed, first to last. An answer that ends with a result, a final step or a one-line conclusion must have a box for that line too.
+- The FIRST box must reach left far enough to include the question number the student wrote beside the answer, so the number is highlighted along with the answer it belongs to.
 - Boxes must wrap the handwriting tightly. Never return a box covering the whole page.
+- Check the last line before you finish: if the block's transcription ends with a line that has no box, add it.
+
+Other rules:
+- Group consecutive lines belonging to the same answer into ONE block. Do not emit one block per line.
 - Ignore printed ruled lines, margin rules, page numbers, QR codes, invigilator marks and the printed booklet header.
 - Section headings such as "Section-A" are not answers. Skip them.
 - Transcribe only what is written. If a page is blank, emit nothing for it.
@@ -126,48 +140,79 @@ export function unionBoxes(boxes: RawBox[], padding = 0.008): BBox | null {
   };
 }
 
-export interface LineGroup {
-  marker: string | null;
-  lines: RawLine[];
+/** Where a sub-part marker sits in the block's own transcription, searched
+ *  forwards so "(b)" is found after "(a)" rather than anywhere on the line. */
+function markerAt(text: string, marker: string, from: number): number {
+  const pattern = new RegExp(`\\(\\s*${marker}\\s*\\)|(?:^|\\s)${marker}\\s*\\)`, "i");
+  const found = text.slice(from).search(pattern);
+  return found === -1 ? -1 : from + found;
 }
 
 /**
- * Finds the "(a)"/"(b)" sections a student marked inside one written answer.
+ * Turns the markers the model reported into parts with their own text and
+ * geometry. Whether these ever become separate blocks is decided later against
+ * the question paper — see materialiseParts.
  *
- * This only *reports* the sections — whether they become separate blocks is
- * decided later, against the question paper, because "(i) (ii) (iii)" inside a
- * single answer is a list rather than a set of sub-parts.
- *
- * A block carrying fewer than two markers has no sections: a single leading
- * "(a)" is just how that one answer starts.
+ * Anything inconsistent drops the parts altogether rather than guessing: a
+ * mis-sliced part would highlight the wrong lines, which is worse than not
+ * splitting at all.
  */
-export function splitIntoParts(lines: RawLine[]): LineGroup[] {
-  const parts: LineGroup[] = [];
+export function buildParts(
+  raw: RawPart[] | null | undefined,
+  lineBoxes: RawBox[],
+  transcription: string,
+  page: number,
+): AnswerPart[] {
+  const cleaned = (raw ?? []).map((part) => ({
+    marker: String(part?.marker ?? "")
+      .toLowerCase()
+      .replace(/[^a-z]/g, ""),
+    firstLine: Number(part?.firstLine),
+  }));
 
-  for (const line of lines) {
-    const marker = leadingSubPart(line.text);
-    const last = parts[parts.length - 1];
-    if (marker && marker !== last?.marker) parts.push({ marker, lines: [line] });
-    else if (last) last.lines.push(line);
-    else parts.push({ marker: null, lines: [line] });
+  if (cleaned.length < 2) return [];
+  if (
+    cleaned.some(
+      (part, i) =>
+        !part.marker ||
+        !Number.isInteger(part.firstLine) ||
+        part.firstLine < 0 ||
+        part.firstLine >= lineBoxes.length ||
+        (i > 0 && part.firstLine <= cleaned[i - 1].firstLine),
+    )
+  ) {
+    return [];
   }
 
-  if (parts.filter((p) => p.marker).length < 2) return [{ marker: null, lines }];
+  const parts: AnswerPart[] = [];
+  let cursor = 0;
 
-  // A shared stem written above the markers belongs with the first part.
-  if (parts[0].marker === null && parts.length > 1) {
-    parts[1].lines = [...parts[0].lines, ...parts[1].lines];
-    parts.shift();
+  for (const [i, part] of cleaned.entries()) {
+    const at = markerAt(transcription, part.marker, cursor);
+    if (at === -1) return [];
+
+    // The first part keeps whatever stem was written above its marker — in its
+    // box as well as its text, or the highlight would start below the words it
+    // is showing.
+    const from = i === 0 ? 0 : at;
+    const fromLine = i === 0 ? 0 : part.firstLine;
+    const nextMarker =
+      i + 1 < cleaned.length
+        ? markerAt(transcription, cleaned[i + 1].marker, at + 1)
+        : -1;
+    const text = transcription
+      .slice(from, nextMarker === -1 ? undefined : nextMarker)
+      .trim();
+
+    const to = cleaned[i + 1]?.firstLine ?? lineBoxes.length;
+    const box = unionBoxes(lineBoxes.slice(fromLine, to));
+    if (!box || !text) return [];
+
+    parts.push({ marker: part.marker, transcription: text, regions: [{ page, box }] });
+    cursor = at + 1;
   }
+
   return parts;
-}
-
-function joinLines(lines: RawLine[]): string {
-  return lines
-    .map((l) => l.text?.trim() ?? "")
-    .filter(Boolean)
-    .join(" ")
-    .trim();
 }
 
 export async function extractAnswersFromPages(
@@ -187,28 +232,15 @@ export async function extractAnswersFromPages(
 
   return (result.blocks ?? [])
     .map((block, index) => {
-      const lines = block.lines ?? [];
-      const page = allowed.has(block.page) ? block.page : pageNumbers[0];
-      const box = unionBoxes(lines.map((l) => l.box));
-      const transcription = joinLines(lines);
+      const lineBoxes = block.lineBoxes ?? [];
+      const box = unionBoxes(lineBoxes);
+      const transcription = block.transcription?.trim() ?? "";
       if (!box || !transcription) return null;
 
-      const groups = splitIntoParts(lines);
-      const parts = groups
-        .map((group) => {
-          const partBox = unionBoxes(group.lines.map((l) => l.box));
-          const text = joinLines(group.lines);
-          return group.marker && partBox && text
-            ? {
-                marker: group.marker,
-                transcription: text,
-                regions: [{ page, box: partBox }],
-              }
-            : null;
-        })
-        .filter((p): p is AnswerPart => p !== null);
-
+      const page = allowed.has(block.page) ? block.page : pageNumbers[0];
       const label = block.labelOnSheet?.trim();
+      const parts = buildParts(block.parts, lineBoxes, transcription, page);
+
       return {
         id: `p${page}b${index + 1}`,
         labelOnSheet: label ? label : null,
