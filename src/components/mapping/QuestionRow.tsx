@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
+import { useAppStore } from "@/lib/store";
 import type { ExtractedQuestion, QuestionResult } from "@/lib/types";
 import { ScorePill } from "./ScorePill";
 
@@ -37,7 +38,13 @@ export function QuestionRow({
   onSelect: () => void;
   onToggle: () => void;
 }) {
+  const blocks = useAppStore((s) => s.blocks);
   const unanswered = result?.verdict === "unanswered";
+  const transcript = (result?.blockIds ?? [])
+    .map((id) => blocks.find((b) => b.id === id)?.transcription ?? "")
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
 
   return (
     <div
@@ -99,6 +106,18 @@ export function QuestionRow({
 
       {expanded && result && (
         <div className="mt-3 rounded-card bg-surface-2 px-6 py-4">
+          {/* What the model actually read, so a teacher can judge whether the
+              mapping and the mark are trustworthy rather than taking both on
+              faith. */}
+          {transcript && (
+            <>
+              <p className="t-p3-bold text-ink">Student&rsquo;s answer</p>
+              <p className="t-p5 mt-2 whitespace-pre-line text-ink">
+                {transcript}
+              </p>
+              <hr className="my-3 border-surface-3" />
+            </>
+          )}
           <p className="t-p3-bold text-ink">AI Feedback</p>
           <p className="t-p5 mt-2 text-ink">{result.feedback}</p>
         </div>
