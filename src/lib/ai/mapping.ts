@@ -5,7 +5,13 @@ import type {
   MatchBasis,
 } from "@/lib/types";
 import { ThinkingLevel, generateJson } from "./client";
-import { bareSubPart, numberKey } from "./numbering";
+import {
+  bareSubPart,
+  lastSubPart,
+  numberKey,
+  parentNumberOf,
+  shallowKey,
+} from "./numbering";
 
 export interface QuestionMatch {
   questionId: string;
@@ -58,24 +64,44 @@ export function materialiseParts(
   questions: ExtractedQuestion[],
   blocks: AnswerBlock[],
 ): AnswerBlock[] {
-  const parents = new Set(
-    questions
-      .map((q) => (q.subLabel ? q.parentNumber : null))
-      .filter((n): n is string => Boolean(n)),
-  );
+  const subLabelsOf = (parent: string) =>
+    new Set(
+      questions
+        .filter((q) => q.parentNumber === parent && q.subLabel)
+        .map((q) => q.subLabel as string),
+    );
+
+  const parents = [
+    ...new Set(
+      questions
+        .map((q) => (q.subLabel ? q.parentNumber : null))
+        .filter((n): n is string => Boolean(n)),
+    ),
+  ];
 
   return blocks.flatMap<AnswerBlock>((block) => {
     const parts = block.parts ?? [];
     const plain = { ...block, parts: undefined };
     if (parts.length < 2) return [plain];
 
-    const covered = [...parents].some((parent) =>
-      parts.every((part) =>
-        questions.some(
-          (q) => q.parentNumber === parent && q.subLabel === part.marker,
-        ),
-      ),
-    );
+    const markers = parts.map((part) => part.marker);
+    // The question the student named, when they named one. Splitting against
+    // that parent is exact; splitting against "some question, somewhere on the
+    // paper, that happens to have these letters" is how an answer to a question
+    // with no sub-parts gets torn in half.
+    const named = block.labelOnSheet
+      ? parentNumberOf(block.labelOnSheet)
+      : null;
+
+    const candidates = named ? [named] : parents;
+    const covered = candidates.some((parent) => {
+      const subLabels = subLabelsOf(parent);
+      // Without a name to go on, the paper's sub-parts must match the student's
+      // markers exactly - a superset would fit far too many answers.
+      return named
+        ? markers.every((m) => subLabels.has(m))
+        : subLabels.size === markers.length && markers.every((m) => subLabels.has(m));
+    });
     if (!covered) return [plain];
 
     return parts.map((part, index) => ({
@@ -146,11 +172,18 @@ export function matchByLabel(
   assigned: Map<string, string[]>;
   leftovers: AnswerBlock[];
 } {
+  // Both keys are registered per question so a sheet and a paper that disagree
+  // about depth still meet: a paper printing "24 (b)(i)" and "24 (b)(ii)" keeps
+  // them apart, while a sheet writing "Q.24)(b)(i)" against a paper that prints
+  // only "24 (b)" still lands.
   const byKey = new Map<string, string>();
   for (const q of questions) {
-    const key = numberKey(q.displayNumber);
-    if (!byKey.has(key)) byKey.set(key, q.id);
+    for (const key of [numberKey(q.displayNumber), shallowKey(q.displayNumber)]) {
+      if (!byKey.has(key)) byKey.set(key, q.id);
+    }
   }
+  const lookup = (label: string) =>
+    byKey.get(numberKey(label)) ?? byKey.get(shallowKey(label));
 
   const assigned = new Map<string, string[]>();
   const leftovers: AnswerBlock[] = [];
@@ -168,7 +201,7 @@ export function matchByLabel(
       ? questions.find(
           (q) =>
             q.parentNumber === parentNumber &&
-            q.subLabel === marker &&
+            lastSubPart(q.displayNumber) === marker &&
             !assigned.has(q.id),
         )
       : undefined;
@@ -189,25 +222,14 @@ export function matchByLabel(
     }
   };
 
-  // Blocks arrive in reading order, so "first on its page" identifies text that
-  // carried over from the page before.
-  const firstOnPage = new Set<string>();
-  const seenPages = new Set<number>();
-  for (const block of blocks) {
-    const page = block.regions[0]?.page;
-    if (page === undefined || seenPages.has(page)) continue;
-    seenPages.add(page);
-    firstOnPage.add(block.id);
-  }
-
   for (const unit of groupUnits(blocks)) {
     // A group is one answer the student split at "(a)"/"(b)". It is matched as
     // a whole, because a bare marker at its head names a part, not a question -
     // reading it as a continuation would bury the answer under the one above.
     if (unit.length > 1) {
       const head = unit[0];
-      const key = head.labelOnSheet ? numberKey(head.labelOnSheet) : null;
-      const exact = key ? byKey.get(key) : undefined;
+      const key = head.labelOnSheet ? shallowKey(head.labelOnSheet) : null;
+      const exact = head.labelOnSheet ? lookup(head.labelOnSheet) : undefined;
 
       if (exact) {
         const parentNumber =
@@ -234,8 +256,8 @@ export function matchByLabel(
 
     const block = unit[0];
     if (block.labelOnSheet) {
-      const key = numberKey(block.labelOnSheet);
-      const questionId = byKey.get(key);
+      const key = shallowKey(block.labelOnSheet);
+      const questionId = lookup(block.labelOnSheet);
       if (questionId) {
         push(questionId, block.id);
         currentQuestionId = questionId;
@@ -250,10 +272,12 @@ export function matchByLabel(
       if (bareSub && currentQuestionId) {
         const openId: string = currentQuestionId;
         const parent = questions.find((q) => q.id === openId);
+        // Matched on the deepest level the paper prints, so a bare "(ii)"
+        // finds "24 (b)(ii)" and not just a question whose subLabel is "ii".
         const sibling = questions.find(
           (q) =>
             q.parentNumber === parent?.parentNumber &&
-            q.subLabel === bareSub &&
+            lastSubPart(q.displayNumber) === bareSub &&
             !assigned.has(q.id),
         );
         const target = sibling?.id ?? openId;
@@ -286,15 +310,12 @@ export function matchByLabel(
 
     // Unlabelled text belongs to the answer above it. The model's
     // `continuesFromPrevPage` flag is the clear signal but it misses short
-    // fragments, so two more shapes count: text opening a fresh page, which is
-    // what a page-break continuation looks like, and text running straight on
-    // under the previous answer, which is what the rest of a long answer looks
-    // like. Text that starts after a gap is left for the semantic pass, since
-    // that is where an unnumbered answer of its own would sit.
+    // fragments, so `followsOn` catches the two shapes it drops: text running
+    // straight on under the previous answer, and text opening the very next
+    // page. Both are measured against where that answer ended, which is what
+    // stops an answer halfway down a later page being swept up with it.
     const continues =
-      block.continuesFromPrevPage ||
-      firstOnPage.has(block.id) ||
-      followsOn(lastAssigned, block);
+      block.continuesFromPrevPage || followsOn(lastAssigned, block);
     if (continues && currentQuestionId) {
       push(currentQuestionId, block.id);
       lastAssigned = block;

@@ -4,6 +4,7 @@ import {
   compactLabel,
   numberKey,
   parseQuestionNumber,
+  shallowKey,
 } from "./numbering";
 
 describe("parseQuestionNumber", () => {
@@ -36,7 +37,7 @@ describe("numberKey", () => {
     ["Ans 7.", "7"],
     ["Q.22)(a)", "22a"],
     ["22 (a)", "22a"],
-    ["Q 24 (b)(i)", "24b"],
+    ["Q 24 (b)(i)", "24bi"],
     ["11(B)", "11b"],
   ])("maps %s to %s", (input, expected) => {
     expect(numberKey(input)).toBe(expected);
@@ -81,5 +82,27 @@ describe("compactLabel", () => {
     // Two passes both reporting "24 (b)(i)" must dedupe; "(ii)" must not.
     expect(compactLabel("24 (b)(i)")).not.toBe(compactLabel("24 (b)(ii)"));
     expect(compactLabel("26 (a)")).not.toBe(compactLabel("26 (b)"));
+  });
+});
+
+describe("nested sub-parts", () => {
+  it("keeps two-level labels apart", () => {
+    // A paper printing both needs two keys, or the second can never be matched.
+    expect(numberKey("24 (b)(i)")).toBe("24bi");
+    expect(numberKey("24 (b)(ii)")).toBe("24bii");
+    expect(numberKey("24 (b)(i)")).not.toBe(numberKey("24 (b)(ii)"));
+  });
+
+  it("matches a sheet label against however deep the paper prints it", () => {
+    // The paper prints "24 (b)" only; the student wrote the roman numeral too.
+    expect(shallowKey("Q.24)(b)(i)")).toBe(numberKey("24 (b)"));
+    // The paper prints both levels; the full key still lands on the right one.
+    expect(numberKey("Q.24)(b)(ii)")).toBe(numberKey("24 (b)(ii)"));
+  });
+
+  it("leaves a one-level label alone", () => {
+    expect(numberKey("22 (a)")).toBe("22a");
+    expect(shallowKey("22 (a)")).toBe("22a");
+    expect(numberKey("7")).toBe("7");
   });
 });

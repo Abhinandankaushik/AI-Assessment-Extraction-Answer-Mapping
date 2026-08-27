@@ -433,3 +433,61 @@ describe("absorbTrailingFragments across a page break", () => {
     expect(absorbTrailingFragments(blocks, matches, ["b2"])).toEqual(["b2"]);
   });
 });
+
+describe("matchByLabel with nested sub-parts", () => {
+  it("matches both halves when the paper prints them separately", () => {
+    // Collapsing "24 (b)(i)" and "24 (b)(ii)" to one key left the second
+    // permanently unmatchable, showing as "Not attempted" beside its answer.
+    const questions = ["24 (b)(i)", "24 (b)(ii)"].map(question);
+    const { assigned, leftovers } = matchByLabel(questions, [
+      block("b1", "Q.24)(b)(i)", { y: 0.1, h: 0.2 }),
+      block("b2", "(ii)", { y: 0.5, h: 0.2 }),
+    ]);
+
+    expect(assigned.get("q0")).toEqual(["b1"]);
+    expect(assigned.get("q1")).toEqual(["b2"]);
+    expect(leftovers).toEqual([]);
+  });
+
+  it("still matches when the paper prints only the shallow label", () => {
+    const questions = ["24 (a)", "24 (b)"].map(question);
+    const { assigned } = matchByLabel(questions, [
+      block("b1", "Q.24)(b)(i)"),
+    ]);
+
+    expect(assigned.get("q1")).toEqual(["b1"]);
+  });
+});
+
+describe("materialiseParts against the right question", () => {
+  it("splits against the parent the student named", () => {
+    const questions = ["22 (a)", "22 (b)", "26 (a)", "26 (b)"].map(question);
+    const out = materialiseParts(questions, [
+      withParts("p10b3", "Q.26)", ["a", "b"]),
+    ]);
+
+    expect(out.map((b) => b.partMarker)).toEqual(["a", "b"]);
+  });
+
+  it("does not split an answer whose own question has no sub-parts", () => {
+    // Q28 has no parts; without naming the question, "some question somewhere
+    // has an (a) and a (b)" was enough to tear this answer in half.
+    const questions = ["22 (a)", "22 (b)", "28"].map(question);
+    const out = materialiseParts(questions, [
+      withParts("p9b1", "Q.28)", ["a", "b"]),
+    ]);
+
+    expect(out).toHaveLength(1);
+    expect(out[0].parts).toBeUndefined();
+  });
+
+  it("needs an exact set of sub-parts when the student named nothing", () => {
+    const questions = ["30 (a)", "30 (b)", "30 (c)"].map(question);
+    // Markers (a) and (b) against a parent printing (a), (b) and (c) is a
+    // guess, not a match.
+    expect(materialiseParts(questions, [withParts("p1b1", null, ["a", "b"])])).toHaveLength(1);
+    expect(
+      materialiseParts(questions, [withParts("p1b1", null, ["a", "b", "c"])]),
+    ).toHaveLength(3);
+  });
+});

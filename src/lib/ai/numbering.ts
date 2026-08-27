@@ -38,12 +38,55 @@ export function compactLabel(display: string): string {
   return display.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-/** Normalised key used to match a label written on an answer sheet ("Q11(a).")
- *  against a question number printed on the paper ("11 (a)"). */
+const PREFIX = /^\s*(?:q(?:uestion)?|ans(?:wer)?)\s*[.:-]?\s*/i;
+
+const SUB = String.raw`(?:\(\s*([a-z]{1,4})\s*\)|([a-z])\s*[.)])`;
+const TWO_LEVEL = new RegExp(String.raw`^(\d+)\s*[.)]?\s*${SUB}\s*${SUB}`, "i");
+
+/**
+ * Normalised key matching a label written on an answer sheet ("Q11(a).")
+ * against a question number printed on the paper ("11 (a)").
+ *
+ * Both levels of a nested label are kept, because a paper that prints
+ * "24 (b)(i)" and "24 (b)(ii)" as separate questions needs separate keys - one
+ * collapsed key would leave the second question permanently unmatchable.
+ * {@link shallowKey} gives the one-level form for a paper that only prints
+ * "24 (b)".
+ */
 export function numberKey(display: string): string {
-  const { parentNumber, subLabel } = parseQuestionNumber(
-    display.replace(/^\s*(?:q(?:uestion)?|ans(?:wer)?)\s*[.:-]?\s*/i, ""),
-  );
+  const cleaned = display.replace(PREFIX, "");
+  const nested = cleaned.trim().match(TWO_LEVEL);
+  if (nested) {
+    const first = nested[2] ?? nested[3];
+    const second = nested[4] ?? nested[5];
+    return `${nested[1]}${first}${second}`.toLowerCase();
+  }
+  return shallowKey(display);
+}
+
+/** The key with any second-level sub-part dropped: "24 (b)(ii)" becomes "24b". */
+export function shallowKey(display: string): string {
+  const cleaned = display.replace(PREFIX, "");
+  const { parentNumber, subLabel } = parseQuestionNumber(cleaned);
   if (!parentNumber) return display.trim().toLowerCase();
   return subLabel ? `${parentNumber}${subLabel}` : parentNumber;
+}
+
+/** The question a label belongs to, ignoring any sub-part: "Q.26)(a)" is "26". */
+export function parentNumberOf(display: string): string | null {
+  return parseQuestionNumber(display.replace(PREFIX, "")).parentNumber;
+}
+
+/**
+ * The deepest sub-part marker in a label: "24 (b)(ii)" is "ii", "22 (a)" is "a".
+ *
+ * A bare "(ii)" written on the sheet has to be matched against whatever the
+ * paper calls its innermost part, which is not always the level
+ * {@link parseQuestionNumber} reports.
+ */
+export function lastSubPart(display: string): string | null {
+  const cleaned = display.replace(PREFIX, "");
+  const nested = cleaned.trim().match(TWO_LEVEL);
+  if (nested) return (nested[4] ?? nested[5]).toLowerCase();
+  return parseQuestionNumber(cleaned).subLabel;
 }
