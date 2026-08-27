@@ -235,11 +235,17 @@ export function AnswerSheetViewer() {
               }}
               className="relative mb-4 overflow-hidden rounded-lg bg-white shadow-sm last:mb-0"
             >
+              {/* Sizing the image from the dimensions the rasteriser already
+                  recorded reserves its height before the data URL decodes.
+                  Without it the scroll-to-answer effect measures a zero-height
+                  page and leaves the highlight off screen. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={page.dataUrl}
                 alt={`Answer sheet page ${page.index + 1}`}
-                className="block w-full"
+                width={page.width}
+                height={page.height}
+                className="block h-auto w-full"
               />
 
               {(regionsByPage.get(page.index + 1) ?? []).map((region, i) => (
@@ -257,7 +263,13 @@ export function AnswerSheetViewer() {
                 >
                   {region === firstRegion && (
                     <span
-                      className="t-p3-bold absolute -top-[30px] left-0 h-[30px] rounded-t-xl px-3 leading-[30px] text-white"
+                      className={`t-p3-bold absolute left-0 h-[30px] px-3 leading-[30px] text-white ${
+                        // The page clips its own overflow, so an answer starting
+                        // at the top of a page would lose a tag drawn above it.
+                        region.box.y * 100 < 4
+                          ? "top-0 rounded-b-xl"
+                          : "-top-[30px] rounded-t-xl"
+                      }`}
                       style={{ backgroundColor: accent.tag }}
                     >
                       {selected?.label}

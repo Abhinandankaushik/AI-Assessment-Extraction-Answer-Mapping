@@ -99,16 +99,25 @@ export async function runPipeline(
   // every read runs at once. Same number of requests, a fraction of the wait.
   const units = batches.length + 1;
   let done = 0;
-  const step = (label: string, stage: Progress["stage"]) => {
+  // The stage drives an ordered checklist, so it may never move backwards. With
+  // both reads in flight the honest reading is "still on the questions until
+  // the questions come back", which only ever advances.
+  let questionsDone = false;
+  const step = (label: string) => {
     done += 1;
-    onProgress({ stage, label, value: lerp(SPAN.extracting, done / units) });
+    onProgress({
+      stage: questionsDone ? "answers" : "questions",
+      label,
+      value: lerp(SPAN.extracting, done / units),
+    });
   };
 
   const [{ questions }, batchResults] = await Promise.all([
     postJson<{ questions: ExtractedQuestion[] }>("/api/extract-questions", {
       pages: questionParts,
     }).then((result) => {
-      step(`Found ${result.questions.length} questions`, "questions");
+      questionsDone = true;
+      step(`Found ${result.questions.length} questions`);
       return result;
     }),
 
@@ -122,7 +131,7 @@ export async function runPipeline(
           totalPages: answerPages.length,
         }).then((result) => {
           const pages = last > first ? `${first}–${last}` : `${first}`;
-          step(`Read answers on page ${pages}`, "answers");
+          step(`Read answers on page ${pages}`);
           return result;
         });
       }),

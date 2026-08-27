@@ -42,6 +42,9 @@ const SUMMARY_SCHEMA = {
 
 const DEFAULT_MARKS = 1;
 
+const NOT_MARKED =
+  "Answers were located and mapped, but marking could not be completed.";
+
 /**
  * Marking is the slowest call in the run, and its cost is output tokens - two
  * sentences of feedback per question, written one after another. Splitting a
@@ -146,8 +149,7 @@ export async function gradeAnswers(
     string,
     { awarded: number; verdict: Verdict; feedback: string }
   >();
-  let overallText =
-    "Answers were located and mapped, but marking could not be completed.";
+  let overallText: string = NOT_MARKED;
 
   const chunks: MappingOutcome["matches"][] = [];
   for (let i = 0; i < outcome.matches.length; i += GRADES_PER_REQUEST) {
@@ -223,13 +225,18 @@ export async function gradeAnswers(
   });
 
   // A paper graded in parts has no single call that saw all of it, so the
-  // closing summary is written once from the finished marks.
-  if (!asksForSummary && graded.size > 0) {
+  // closing summary is written once from the finished marks. The same call
+  // covers a single-chunk run whose response simply left "overall" out.
+  if (graded.size > 0 && overallText === NOT_MARKED) {
     overallText = (await summarise(questions, results)) ?? overallText;
   }
 
-  const awarded = results.reduce((sum, r) => sum + (r.awarded ?? 0), 0);
-  const total = results.reduce((sum, r) => sum + (r.total ?? 0), 0);
+  // A question whose marking failed has no mark, which is not the same as
+  // scoring nothing: counting its total would quietly report the failure as a
+  // zero the student never earned. An unattempted question keeps its 0.
+  const marked = results.filter((r) => r.awarded !== null);
+  const awarded = marked.reduce((sum, r) => sum + (r.awarded ?? 0), 0);
+  const total = marked.reduce((sum, r) => sum + (r.total ?? 0), 0);
 
   return {
     results,
