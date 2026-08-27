@@ -106,9 +106,9 @@ vercel --prod
 ```
 
 The key is only read at request time, so the build itself needs no secrets.
-Both AI routes declare `maxDuration = 60`, which fits inside Vercel's limit —
-question extraction takes roughly 20-30s and each batch of answer pages about
-8-10s.
+The AI routes declare `maxDuration = 300`. Measured on the 10-page sample:
+question extraction ~30s, each batch of four answer pages 10-17s, and mapping
+plus grading ~100s — about three minutes end to end.
 
 ## Sample files
 

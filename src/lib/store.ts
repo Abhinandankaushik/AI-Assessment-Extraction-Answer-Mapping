@@ -45,6 +45,10 @@ interface AppState extends Omit<RunData, "summary"> {
   error: string | null;
   selectedQuestionId: string | null;
   sidebarCollapsed: boolean;
+  /** Identifies the upload a completed run belongs to, so returning to
+   *  /review with the same files shows the result instead of paying for it
+   *  again. */
+  runKey: string | null;
 
   addFiles: (kind: UploadKind, files: UploadedFile[]) => void;
   removeFile: (kind: UploadKind, id: string) => void;
@@ -54,7 +58,7 @@ interface AppState extends Omit<RunData, "summary"> {
   fail: (message: string) => void;
   selectQuestion: (questionId: string | null) => void;
   toggleSidebar: () => void;
-  loadRun: (run: RunData) => void;
+  loadRun: (run: RunData, runKey?: string | null) => void;
   reset: () => void;
 }
 
@@ -71,7 +75,15 @@ const EMPTY = {
   orphanBlockIds: [],
   selectedQuestionId: null,
   sidebarCollapsed: false,
+  runKey: null,
 };
+
+/** Two uploads are "the same run" when the same files sit in both slots. */
+export function runKeyFor(files: Record<UploadKind, UploadedFile[]>): string | null {
+  if (files.question.length === 0 || files.answer.length === 0) return null;
+  const ids = (list: UploadedFile[]) => list.map((f) => f.id).join("|");
+  return `${ids(files.question)}::${ids(files.answer)}`;
+}
 
 export const useAppStore = create<AppState>((set) => ({
   ...EMPTY,
@@ -103,9 +115,10 @@ export const useAppStore = create<AppState>((set) => ({
   toggleSidebar: () =>
     set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
-  loadRun: (run) =>
+  loadRun: (run, runKey = null) =>
     set({
       ...run,
+      runKey,
       phase: "mapping",
       error: null,
       progress: { stage: "done", label: "Done", value: 1 },

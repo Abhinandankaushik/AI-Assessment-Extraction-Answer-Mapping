@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft, Bell, Menu } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { LogoMark } from "@/components/brand/Logo";
 
 function Avatar({ size = 32 }: { size?: number }) {
@@ -20,13 +21,16 @@ function Avatar({ size = 32 }: { size?: number }) {
 /** Phone frames replace the desktop rail + top bar with a single floating bar
  *  sitting on a progressively blurred strip. */
 export function MobileHeader() {
+  const router = useRouter();
+
   return (
     <div className="sticky top-0 z-20 bg-white/[0.01] px-2.5 pt-2.5 pb-3 backdrop-blur-xl md:hidden">
       <header className="flex h-14 items-center justify-between rounded-card bg-surface pr-4 pl-3">
         <div className="flex items-center gap-2">
           <button
             type="button"
-            aria-label="Go back"
+            onClick={() => router.push("/")}
+            aria-label="Back to upload"
             className="grid size-7 place-items-center text-ink"
           >
             <ArrowLeft size={20} />

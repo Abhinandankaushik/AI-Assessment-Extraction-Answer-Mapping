@@ -4,7 +4,9 @@ import { mapAnswersToQuestions } from "@/lib/ai/mapping";
 import type { AnswerBlock, ExtractedQuestion } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Measured on the 10-page sample: question extraction ~30s, each answer
+// batch ~10-17s, mapping plus grading ~100s. 60s was not enough.
+export const maxDuration = 300;
 
 /** Mapping and grading share one round trip: both are text-only and the
  *  free-tier quota counts requests, not tokens. */

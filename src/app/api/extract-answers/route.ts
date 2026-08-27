@@ -3,7 +3,9 @@ import { extractAnswersFromPages } from "@/lib/ai/answers";
 import type { ImagePart } from "@/lib/ai/client";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Measured on the 10-page sample: question extraction ~30s, each answer
+// batch ~10-17s, mapping plus grading ~100s. 60s was not enough.
+export const maxDuration = 300;
 
 /** A batch of pages per request — the free-tier quota counts requests, not
  *  images, so batching is what keeps a public demo usable. */

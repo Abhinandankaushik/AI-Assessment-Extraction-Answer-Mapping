@@ -111,7 +111,9 @@ export async function gradeAnswers(
         system: SYSTEM,
         prompt: buildPrompt(questions, blocks, outcome),
         schema: SCHEMA,
-        thinking: ThinkingLevel.MEDIUM,
+        // Marking against a printed question is judgement, not deduction —
+        // MEDIUM roughly doubled the wall clock for no visible gain.
+        thinking: ThinkingLevel.LOW,
       });
 
       for (const g of response.grades ?? []) {

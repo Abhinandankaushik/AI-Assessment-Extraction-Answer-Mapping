@@ -7,6 +7,7 @@ import {
   CircleQuestionMark,
   Sparkles,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { ExamsIcon } from "@/components/brand/NavIcons";
 
 function Avatar({ size = 32 }: { size?: number }) {
@@ -24,12 +25,15 @@ function Avatar({ size = 32 }: { size?: number }) {
 }
 
 export function TopBar({ title = "Exams" }: { title?: string }) {
+  const router = useRouter();
+
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-2.5 rounded-card bg-white/75 py-2 pr-2 pl-6 backdrop-blur-xl">
       <div className="flex min-w-0 items-center gap-4">
         <button
           type="button"
-          aria-label="Go back"
+          onClick={() => router.push("/")}
+          aria-label="Back to upload"
           className="text-ink transition-colors hover:text-brand"
         >
           <ArrowLeft size={20} />

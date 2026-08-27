@@ -1,12 +1,14 @@
 "use client";
 
 import { RotateCcw, TriangleAlert } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useAppStore } from "@/lib/store";
 import { PrimaryButton } from "@/components/ui/PrimaryButton";
 
 /** Extraction used to fail silently and render an empty result, which reads as
  *  "the student answered nothing". Failures are now explicit. */
 export function ErrorScreen() {
+  const router = useRouter();
   const { error, reset } = useAppStore();
   const quotaHit = /quota|exhausted|429/i.test(error ?? "");
 
@@ -26,7 +28,13 @@ export function ErrorScreen() {
           : (error ?? "The extraction could not be completed.")}
       </p>
 
-      <PrimaryButton className="mt-7" onClick={reset}>
+      <PrimaryButton
+        className="mt-7"
+        onClick={() => {
+          reset();
+          router.push("/");
+        }}
+      >
         <RotateCcw size={16} />
         Start over
       </PrimaryButton>

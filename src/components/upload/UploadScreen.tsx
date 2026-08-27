@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRight } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback } from "react";
 import { countPages, isPdf } from "@/lib/pdf";
 import { useAppStore } from "@/lib/store";
@@ -17,7 +18,8 @@ const byPageOrder = new Intl.Collator(undefined, {
 });
 
 export function UploadScreen() {
-  const { files, addFiles, removeFile, clearSlot, setPhase } = useAppStore();
+  const router = useRouter();
+  const { files, addFiles, removeFile, clearSlot } = useAppStore();
   const ready = files.question.length > 0 && files.answer.length > 0;
 
   const handleSelect = useCallback(
@@ -83,7 +85,7 @@ export function UploadScreen() {
         <PrimaryButton
           className="mt-8 md:mt-10"
           disabled={!ready}
-          onClick={() => setPhase("extracting")}
+          onClick={() => router.push("/review")}
         >
           Start Mapping
           <ArrowRight size={16} />
