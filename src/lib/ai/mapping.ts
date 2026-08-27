@@ -1,10 +1,4 @@
-import { Type } from "@google/genai";
-import type {
-  AnswerBlock,
-  ExtractedQuestion,
-  MatchBasis,
-} from "@/lib/types";
-import { ThinkingLevel, generateJson } from "./client";
+import type { AnswerBlock, ExtractedQuestion, MatchBasis } from "@/lib/types";
 import {
   bareSubPart,
   lastSubPart,
@@ -26,29 +20,6 @@ export interface MappingOutcome {
   orphanBlockIds: string[];
 }
 
-const SYSTEM =
-  "You match a student's answers to the questions they were answering. " +
-  "You are conservative: an answer with no convincing question is left unmatched.";
-
-const SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    matches: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          blockId: { type: Type.STRING },
-          questionId: { type: Type.STRING, nullable: true },
-          confidence: { type: Type.NUMBER },
-        },
-        required: ["blockId", "questionId", "confidence"],
-      },
-    },
-  },
-  required: ["matches"],
-} as const;
-
 /**
  * Turns the sections a student marked inside one answer into separate blocks —
  * but only when the paper prints a sub-question for EVERY one of them.
@@ -64,9 +35,6 @@ export function materialiseParts(
   questions: ExtractedQuestion[],
   blocks: AnswerBlock[],
 ): AnswerBlock[] {
-  // The deepest level, matching openSibling and the bare-marker branch. Reading
-  // subLabel here instead called "24 (b)(i)" a "b", so an answer marked (i) and
-  // (ii) matched nothing and was never split.
   const subLabelsOf = (parent: string) =>
     new Set(
       questions
@@ -93,9 +61,7 @@ export function materialiseParts(
     // that parent is exact; splitting against "some question, somewhere on the
     // paper, that happens to have these letters" is how an answer to a question
     // with no sub-parts gets torn in half.
-    const named = block.labelOnSheet
-      ? parentNumberOf(block.labelOnSheet)
-      : null;
+    const named = block.labelOnSheet ? parentNumberOf(block.labelOnSheet) : null;
 
     const candidates = named ? [named] : parents;
     const covered = candidates.some((parent) => {
@@ -104,7 +70,8 @@ export function materialiseParts(
       // markers exactly - a superset would fit far too many answers.
       return named
         ? markers.every((m) => subLabels.has(m))
-        : subLabels.size === markers.length && markers.every((m) => subLabels.has(m));
+        : subLabels.size === markers.length &&
+            markers.every((m) => subLabels.has(m));
     });
     if (!covered) return [plain];
 
@@ -122,52 +89,6 @@ export function materialiseParts(
   });
 }
 
-/**
- * How far below an answer unlabelled text can start and still be a continuation
- * of it, as a fraction of page height — a little over one written line.
- *
- * Deliberately tight: text wrongly attached here is never reconsidered, while
- * text left behind still gets its chance at the semantic pass.
- */
-const CONTINUATION_GAP = 0.04;
-
-/**
- * How far down a fresh page a continuation can begin.
- *
- * Generous, because an answer booklet prints a header and a QR band across the
- * top of every page: the first handwriting on a page routinely starts a quarter
- * of the way down, and a tighter threshold left the second half of an answer
- * stranded as "unmatched". What keeps this honest is not the number but the
- * adjacency it is paired with — the block must be the very next thing written.
- */
-const TOP_OF_PAGE = 0.45;
-
-/**
- * True when `block` picks up directly where `prev` left off on the same page:
- * no real gap between them. A fresh answer leaves visible space above it.
- */
-function followsOn(prev: AnswerBlock | null, block: AnswerBlock): boolean {
-  const above = prev?.regions[prev.regions.length - 1];
-  const below = block.regions[0];
-  if (!above || !below || above.page !== below.page) return false;
-  const gap = below.box.y - (above.box.y + above.box.h);
-  return gap >= -CONTINUATION_GAP && gap <= CONTINUATION_GAP;
-}
-
-/**
- * True when `block` opens the page after `prev` ends.
- *
- * Only sound when the caller knows the two are adjacent in reading order, since
- * that is what makes `block` the first thing written on its page — which is
- * where an answer carried over a page break resumes.
- */
-function opensNextPage(prev: AnswerBlock | null, block: AnswerBlock): boolean {
-  const above = prev?.regions[prev.regions.length - 1];
-  const below = block.regions[0];
-  if (!above || !below) return false;
-  return below.page === above.page + 1 && below.box.y <= TOP_OF_PAGE;
-}
-
 /** Consecutive parts of one written answer, kept together for matching. */
 function groupUnits(blocks: AnswerBlock[]): AnswerBlock[][] {
   const units: AnswerBlock[][] = [];
@@ -180,10 +101,21 @@ function groupUnits(blocks: AnswerBlock[]): AnswerBlock[][] {
 }
 
 /**
- * Answers that carry a written question number are matched in plain code —
- * that is both exact and free. Only the leftovers reach the model, which keeps
- * the request count (and therefore the free-tier quota) down and stops the
- * model from second-guessing a label the student wrote themselves.
+ * Reads the sheet the way it was written.
+ *
+ * A student writes a question number and then answers under it, so a number
+ * opens a question and everything below belongs to that question until the next
+ * number appears — however far down the page, across however many page breaks.
+ * Within that run "(a)" opens a sub-part and holds until "(b)" or the next
+ * question number.
+ *
+ * Earlier versions tried to be cleverer. Geometry decided whether a fragment
+ * continued the answer above it, and whatever fell through was handed to the
+ * model to match on subject matter instead. Both went wrong in ways a teacher
+ * sees at a glance: half an answer highlighted because the gap above the rest
+ * was a millimetre too wide, and answers filed under questions they were plainly
+ * not written for. The student already wrote down which question they were
+ * answering; nothing here is better evidence than that.
  */
 export function matchByLabel(
   questions: ExtractedQuestion[],
@@ -207,8 +139,10 @@ export function matchByLabel(
 
   const assigned = new Map<string, string[]>();
   const leftovers: AnswerBlock[] = [];
-  let currentQuestionId: string | null = null;
-  let lastAssigned: AnswerBlock | null = null;
+  /** The question everything written from here on belongs to. */
+  let openQuestionId: string | null = null;
+  /** The number that opened it, so a bare "(b)" knows whose sibling it wants. */
+  let openParent: string | null = null;
 
   const push = (questionId: string, blockId: string) => {
     const list = assigned.get(questionId) ?? [];
@@ -216,162 +150,67 @@ export function matchByLabel(
     assigned.set(questionId, list);
   };
 
-  const openSibling = (parentNumber: string | null, marker: string | null) =>
-    parentNumber && marker
-      ? questions.find(
-          (q) =>
-            q.parentNumber === parentNumber &&
-            lastSubPart(q.displayNumber) === marker &&
-            !assigned.has(q.id),
-        )
-      : undefined;
+  const openUnder = (parent: string) =>
+    questions.filter((q) => q.parentNumber === parent && !assigned.has(q.id));
 
-  /** Hands each part of one written answer to its own sub-question, falling
-   *  back to the question the group as a whole matched. */
-  const distribute = (
-    unit: AnswerBlock[],
-    parentNumber: string | null,
-    fallbackId: string,
-  ) => {
+  const siblingFor = (parent: string, marker: string) =>
+    questions.find(
+      (q) =>
+        q.parentNumber === parent &&
+        lastSubPart(q.displayNumber) === marker &&
+        !assigned.has(q.id),
+    );
+
+  /** Files a unit under whatever is open, following each part's own marker. */
+  const file = (unit: AnswerBlock[]) => {
     for (const part of unit) {
-      const sibling = openSibling(parentNumber, part.partMarker ?? null);
-      const target = sibling?.id ?? fallbackId;
-      push(target, part.id);
-      currentQuestionId = target;
-      lastAssigned = part;
+      const marker = part.partMarker ?? null;
+      const sibling =
+        marker && openParent ? siblingFor(openParent, marker) : undefined;
+      if (sibling) openQuestionId = sibling.id;
+      if (openQuestionId) push(openQuestionId, part.id);
+      else leftovers.push(part);
     }
   };
 
-  const units = groupUnits(blocks);
-  for (const [index, unit] of units.entries()) {
-    // The block immediately before this one in reading order, assigned or not.
-    // Only when that block is also the last one assigned does a page break mean
-    // "this answer continues" rather than "something else was written between".
-    const before = units[index - 1];
-    const previousBlock = before ? before[before.length - 1] : null;
+  for (const unit of groupUnits(blocks)) {
+    const label = unit[0].labelOnSheet;
+    const parent = label ? parentNumberOf(label) : null;
 
-    // A group is one answer the student split at "(a)"/"(b)". It is matched as
-    // a whole, because a bare marker at its head names a part, not a question -
-    // reading it as a continuation would bury the answer under the one above.
-    if (unit.length > 1) {
-      const head = unit[0];
-      const key = head.labelOnSheet ? shallowKey(head.labelOnSheet) : null;
-      const exact = head.labelOnSheet ? lookup(head.labelOnSheet) : undefined;
-
-      if (exact) {
-        const parentNumber =
-          questions.find((q) => q.id === exact)?.parentNumber ?? null;
-        distribute(unit, parentNumber, exact);
-        continue;
+    if (label && parent) {
+      // A written question number opens a new question. When the paper prints
+      // only sub-parts under it, the first one still open is the one being
+      // answered — students work through parts in order.
+      const named = lookup(label) ?? openUnder(parent)[0]?.id ?? null;
+      if (named) {
+        openQuestionId = named;
+        openParent = parent;
+        file(unit);
+      } else {
+        // A number the paper does not print, so this answer is a stray. The
+        // question already open stays open: losing the thread here would strand
+        // everything written after it as well.
+        leftovers.push(...unit);
       }
-
-      const openSubParts = key
-        ? questions.filter(
-            (q) => q.parentNumber === key && q.subLabel && !assigned.has(q.id),
-          )
-        : [];
-      if (openSubParts.length > 0) {
-        distribute(unit, key, openSubParts[0].id);
-        continue;
-      }
-
-      currentQuestionId = null;
-      lastAssigned = null;
-      leftovers.push(...unit);
       continue;
     }
 
-    const block = unit[0];
-    if (block.labelOnSheet) {
-      const key = shallowKey(block.labelOnSheet);
-      const questionId = lookup(block.labelOnSheet);
-      if (questionId) {
-        push(questionId, block.id);
-        currentQuestionId = questionId;
-        lastAssigned = block;
-        continue;
-      }
-
-      // A bare sub-part marker — the student wrote "Q.26)" once and then just
-      // "(b)" on the next line. It belongs to the numbered answer above it,
-      // either as its own printed sub-part or folded into the parent.
-      const bareSub = bareSubPart(block.labelOnSheet);
-      if (bareSub && currentQuestionId) {
-        const openId: string = currentQuestionId;
-        const parent = questions.find((q) => q.id === openId);
-        // Matched on the deepest level the paper prints, so a bare "(ii)"
-        // finds "24 (b)(ii)" and not just a question whose subLabel is "ii".
-        const sibling = questions.find(
-          (q) =>
-            q.parentNumber === parent?.parentNumber &&
-            lastSubPart(q.displayNumber) === bareSub &&
-            !assigned.has(q.id),
-        );
-        const target = sibling?.id ?? openId;
-        push(target, block.id);
-        currentQuestionId = target;
-        lastAssigned = block;
-        continue;
-      }
-
-      // Students often write the parent number only ("Q.24") on a paper that
-      // prints just sub-parts. Give it the first sub-part still open: students
-      // answer parts in order, and holding the question open is what lets the
-      // bare "(b)" written underneath find its own sibling. Refusing to choose
-      // sent the whole run to the semantic pass, which then had nothing but
-      // subject matter to go on and filed the answers under other questions.
-      const openSubParts = questions.filter(
-        (q) => q.parentNumber === key && q.subLabel && !assigned.has(q.id),
-      );
-      if (openSubParts.length > 0) {
-        push(openSubParts[0].id, block.id);
-        currentQuestionId = openSubParts[0].id;
-        lastAssigned = block;
-        continue;
-      }
-      // A label that matches nothing: could be a misread digit or a genuine
-      // stray answer, so let the semantic pass decide.
-      currentQuestionId = null;
-      lastAssigned = null;
-      leftovers.push(block);
-      continue;
+    // A bare "(b)" names a sub-part of the question already open.
+    const marker = label ? bareSubPart(label) : null;
+    if (marker && openParent) {
+      const sibling = siblingFor(openParent, marker);
+      if (sibling) openQuestionId = sibling.id;
     }
-
-    // Unlabelled text belongs to the answer above it. The model's
-    // `continuesFromPrevPage` flag is the clear signal but it misses short
-    // fragments, so `followsOn` catches the two shapes it drops: text running
-    // straight on under the previous answer, and text opening the very next
-    // page. Both are measured against where that answer ended, which is what
-    // stops an answer halfway down a later page being swept up with it.
-    const continues =
-      block.continuesFromPrevPage ||
-      followsOn(lastAssigned, block) ||
-      (previousBlock === lastAssigned && opensNextPage(lastAssigned, block));
-    if (continues && currentQuestionId) {
-      push(currentQuestionId, block.id);
-      lastAssigned = block;
-      continue;
-    }
-
-    // Whatever comes next is no longer directly under the answer we were
-    // following: this block now sits between them.
-    currentQuestionId = null;
-    lastAssigned = null;
-    leftovers.push(block);
+    file(unit);
   }
 
   return { assigned, leftovers };
 }
 
-function snippet(text: string, max = 280): string {
-  const clean = text.replace(/\s+/g, " ").trim();
-  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
-}
-
-export async function mapAnswersToQuestions(
+export function mapAnswersToQuestions(
   questions: ExtractedQuestion[],
   blocks: AnswerBlock[],
-): Promise<MappingOutcome> {
+): MappingOutcome {
   const { assigned, leftovers } = matchByLabel(questions, blocks);
 
   const matches: QuestionMatch[] = [...assigned.entries()].map(
@@ -383,221 +222,14 @@ export async function mapAnswersToQuestions(
     }),
   );
 
-  const stillOpen = questions.filter((q) => !assigned.has(q.id));
-  const orphanBlockIds: string[] = [];
-
-  if (leftovers.length > 0 && stillOpen.length > 0) {
-    try {
-      const result = await generateJson<{
-        matches: {
-          blockId: string;
-          questionId: string | null;
-          confidence: number;
-        }[];
-      }>({
-        system: SYSTEM,
-        prompt: `Some answers on a student's sheet carry no usable question number. Decide which unanswered question each one belongs to, based on the subject matter.
-
-UNANSWERED QUESTIONS:
-${stillOpen
-  .map((q) => `- id=${q.id} | ${q.displayNumber} | ${snippet(q.text, 200)}`)
-  .join("\n")}
-
-UNMATCHED ANSWERS:
-${leftovers
-  .map(
-    (b) =>
-      `- id=${b.id} | studentWroteLabel=${b.labelOnSheet ?? "none"} | ${snippet(b.transcription)}`,
-  )
-  .join("\n")}
-
-Rules:
-- Return one entry per unmatched answer, using its exact id.
-- Set questionId to null when no question is a convincing fit. A stray answer with no matching question is a valid, expected outcome - do not force a match.
-- confidence is 0 to 1. Use below 0.5 when you are unsure.
-- Never assign the same question to two different answers.`,
-        schema: SCHEMA,
-        thinking: ThinkingLevel.MEDIUM,
-      });
-
-      const open = new Set(stillOpen.map((q) => q.id));
-      const parentOf = new Map(stillOpen.map((q) => [q.id, q.parentNumber]));
-      const taken = new Set<string>();
-      // One reply, one decision per answer. Without this a repeated blockId put
-      // the same answer under two questions, or matched it and listed it as
-      // unmatched at the same time.
-      const decided = new Set<string>();
-
-      for (const m of result.matches ?? []) {
-        const block = leftovers.find((b) => b.id === m.blockId);
-        if (!block || decided.has(block.id)) continue;
-        decided.add(block.id);
-
-        // A number the student wrote outranks the model's reading of the
-        // subject matter. Matching against it filed answers under questions
-        // they were plainly not written for.
-        const written = block.labelOnSheet
-          ? parentNumberOf(block.labelOnSheet)
-          : null;
-        const contradicted =
-          written !== null &&
-          m.questionId != null &&
-          (parentOf.get(m.questionId) ?? null) !== null &&
-          parentOf.get(m.questionId) !== written;
-
-        if (
-          m.questionId &&
-          !contradicted &&
-          open.has(m.questionId) &&
-          !taken.has(m.questionId) &&
-          m.confidence >= 0.35
-        ) {
-          taken.add(m.questionId);
-          matches.push({
-            questionId: m.questionId,
-            blockIds: [block.id],
-            basis: "semantic",
-            confidence: m.confidence,
-          });
-        } else {
-          orphanBlockIds.push(block.id);
-        }
-      }
-
-      // Anything the model failed to mention is still unaccounted for.
-      const reported = new Set((result.matches ?? []).map((m) => m.blockId));
-      for (const block of leftovers) {
-        if (!reported.has(block.id)) orphanBlockIds.push(block.id);
-      }
-    } catch {
-      orphanBlockIds.push(...leftovers.map((b) => b.id));
-    }
-  } else {
-    orphanBlockIds.push(...leftovers.map((b) => b.id));
-  }
-
-  const orphans = absorbTrailingFragments(
-    blocks,
-    matches,
-    snapGroups(questions, blocks, matches, orphanBlockIds),
-  );
-
   const answered = new Set(matches.map((m) => m.questionId));
   return {
     matches,
     unansweredQuestionIds: questions
       .filter((q) => !answered.has(q.id))
       .map((q) => q.id),
-    orphanBlockIds: orphans,
+    // Only what was written before the student's first question number, which
+    // on a sheet that carries any numbering at all is nothing.
+    orphanBlockIds: leftovers.map((b) => b.id),
   };
-}
-
-/**
- * Gives an orphan back to the answer it runs on from.
- *
- * `matchByLabel` already does this while it walks the sheet, but it can only
- * act on answers it matched itself. When a question is matched by the semantic
- * pass instead, the fragments below it — the "(ii)" half of an answer whose
- * "(i)" half carried the number — have nowhere to attach and end up unmatched,
- * so the answer is highlighted and marked half-finished.
- *
- * Mutates `matches`; returns the orphan ids that survive.
- */
-export function absorbTrailingFragments(
-  blocks: AnswerBlock[],
-  matches: QuestionMatch[],
-  orphanBlockIds: string[],
-): string[] {
-  const orphans = new Set(orphanBlockIds);
-  if (orphans.size === 0) return orphanBlockIds;
-
-  const owners = new Map<string, QuestionMatch>();
-  for (const match of matches) {
-    for (const blockId of match.blockIds) owners.set(blockId, match);
-  }
-
-  // Reading order, so each fragment is weighed against what sits directly
-  // above it. Absorbing as we go lets a run of them chain onto one answer.
-  for (let i = 1; i < blocks.length; i++) {
-    const block = blocks[i];
-    if (!orphans.has(block.id)) continue;
-    // A written number points somewhere specific; only a bare marker or no
-    // label at all can belong to whatever came before.
-    if (block.labelOnSheet && !bareSubPart(block.labelOnSheet)) continue;
-
-    // Adjacent in reading order by construction, so a page break here really
-    // is this answer resuming at the top of the next page.
-    const above = blocks[i - 1];
-    const owner = owners.get(above.id);
-    if (!owner || !(followsOn(above, block) || opensNextPage(above, block))) continue;
-
-    owner.blockIds.push(block.id);
-    owners.set(block.id, owner);
-    orphans.delete(block.id);
-  }
-
-  return [...orphans];
-}
-
-/**
- * The parts of one written answer belong to one question's sub-parts, so once
- * any part has found its question the rest follow by marker. Without this a
- * group can end up half matched and half unmatched, which is exactly the case
- * a teacher then has to fix by hand.
- *
- * Mutates `matches`; returns the orphan ids that survive.
- */
-export function snapGroups(
-  questions: ExtractedQuestion[],
-  blocks: AnswerBlock[],
-  matches: QuestionMatch[],
-  orphanBlockIds: string[],
-): string[] {
-  const groupIds = new Set(
-    blocks.map((b) => b.groupId).filter((id): id is string => Boolean(id)),
-  );
-  if (groupIds.size === 0) return orphanBlockIds;
-
-  const questionById = new Map(questions.map((q) => [q.id, q]));
-  const questionOfBlock = new Map<string, string>();
-  for (const match of matches) {
-    for (const blockId of match.blockIds) {
-      questionOfBlock.set(blockId, match.questionId);
-    }
-  }
-
-  const answered = new Set(matches.map((m) => m.questionId));
-  const orphans = new Set(orphanBlockIds);
-
-  for (const groupId of groupIds) {
-    const parts = blocks.filter((b) => b.groupId === groupId);
-    const anchor = parts
-      .map((p) => questionOfBlock.get(p.id))
-      .find((id): id is string => Boolean(id));
-    const parentNumber = anchor
-      ? questionById.get(anchor)?.parentNumber
-      : null;
-    if (!parentNumber) continue;
-
-    for (const part of parts) {
-      if (!orphans.has(part.id) || !part.partMarker) continue;
-      const sibling = questions.find(
-        (q) =>
-          q.parentNumber === parentNumber &&
-          lastSubPart(q.displayNumber) === part.partMarker &&
-          !answered.has(q.id),
-      );
-      if (!sibling) continue;
-      answered.add(sibling.id);
-      orphans.delete(part.id);
-      matches.push({
-        questionId: sibling.id,
-        blockIds: [part.id],
-        basis: "semantic",
-        confidence: 0.6,
-      });
-    }
-  }
-
-  return [...orphans];
 }

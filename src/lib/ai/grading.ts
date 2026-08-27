@@ -157,9 +157,13 @@ export async function gradeAnswers(
   }
   const asksForSummary = chunks.length === 1;
 
-  const responses = await Promise.all(
-    chunks.map((chunk) =>
-      generateJson<{
+  // One at a time, like the reads: a chunk that meets a rate limit rolls to
+  // another model, and half a paper marked to one standard and half to another
+  // is not a mark sheet anybody should act on.
+  const responses = [];
+  for (const chunk of chunks) {
+    responses.push(
+      await generateJson<{
         grades: {
           questionId: string;
           awarded: number;
@@ -177,8 +181,8 @@ export async function gradeAnswers(
         // Grading is additive: without it the mapping and highlighting still
         // work, and one chunk failing must not cost the others theirs.
       }).catch(() => null),
-    ),
-  );
+    );
+  }
 
   for (const response of responses) {
     for (const g of response?.grades ?? []) {

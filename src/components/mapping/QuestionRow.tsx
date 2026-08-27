@@ -75,11 +75,6 @@ export function QuestionRow({
             {unanswered && (
               <span className="t-p5 mt-1 block text-danger">Not attempted</span>
             )}
-            {result?.matchBasis === "semantic" && (
-              <span className="t-p5 mt-1 block text-warning">
-                Matched by content, not by a written question number
-              </span>
-            )}
           </span>
         </button>
 

@@ -75,7 +75,7 @@ export async function runPipeline(
 
   onProgress({
     stage: "questions",
-    label: "Reading the paper and the answer sheet",
+    label: "Extracting questions from the paper",
     value: SPAN.extracting[0],
   });
 
@@ -95,51 +95,46 @@ export async function runPipeline(
     batches.push(answerPages.slice(i, i + PAGES_PER_REQUEST));
   }
 
-  // The paper and the sheet have nothing to say to each other until mapping, so
-  // every read runs at once. Same number of requests, a fraction of the wait.
+  // Deliberately one request at a time. Running them together was quicker, but
+  // a batch that meets a rate limit rolls to the next model on its own, so one
+  // sheet could come back read by two models with two ideas of where a line
+  // sits. Reading in order keeps a run internally consistent, which matters
+  // more here than the minute it costs.
   const units = batches.length + 1;
   let done = 0;
-  // The stage drives an ordered checklist, so it may never move backwards. With
-  // both reads in flight the honest reading is "still on the questions until
-  // the questions come back", which only ever advances.
-  let questionsDone = false;
-  const step = (label: string) => {
+  const step = (stage: Progress["stage"], label: string) => {
     done += 1;
-    onProgress({
-      stage: questionsDone ? "answers" : "questions",
-      label,
-      value: lerp(SPAN.extracting, done / units),
-    });
+    onProgress({ stage, label, value: lerp(SPAN.extracting, done / units) });
   };
 
-  const [{ questions }, batchResults] = await Promise.all([
-    postJson<{ questions: ExtractedQuestion[] }>("/api/extract-questions", {
-      pages: questionParts,
-    }).then((result) => {
-      questionsDone = true;
-      step(`Found ${result.questions.length} questions`);
-      return result;
-    }),
+  const { questions } = await postJson<{ questions: ExtractedQuestion[] }>(
+    "/api/extract-questions",
+    { pages: questionParts },
+  );
+  step("questions", `Found ${questions.length} questions`);
 
-    Promise.all(
-      batches.map((batch) => {
-        const first = batch[0].index + 1;
-        const last = batch[batch.length - 1].index + 1;
-        return postJson<{ blocks: AnswerBlock[] }>("/api/extract-answers", {
-          pages: batch.map(asPart),
-          pageNumbers: batch.map((p) => p.index + 1),
-          totalPages: answerPages.length,
-        }).then((result) => {
-          const pages = last > first ? `${first}–${last}` : `${first}`;
-          step(`Read answers on page ${pages}`);
-          return result;
-        });
-      }),
-    ),
-  ]);
+  const blocks: AnswerBlock[] = [];
+  for (const batch of batches) {
+    const first = batch[0].index + 1;
+    const last = batch[batch.length - 1].index + 1;
+    const pages = last > first ? `${first}–${last}` : `${first}`;
+    onProgress({
+      stage: "answers",
+      label: `Reading answers on page ${pages}`,
+      value: lerp(SPAN.extracting, done / units),
+    });
 
-  // Batch order is preserved, so blocks stay in page order.
-  const blocks = batchResults.flatMap((result) => result.blocks);
+    const result = await postJson<{ blocks: AnswerBlock[] }>(
+      "/api/extract-answers",
+      {
+        pages: batch.map(asPart),
+        pageNumbers: batch.map((p) => p.index + 1),
+        totalPages: answerPages.length,
+      },
+    );
+    blocks.push(...result.blocks);
+    step("answers", `Read answers on page ${pages}`);
+  }
 
   onProgress({
     stage: "mapping",

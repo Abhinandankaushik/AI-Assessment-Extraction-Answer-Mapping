@@ -6,6 +6,7 @@ import {
   generateJson,
   type ImagePart,
 } from "./client";
+import { leadingLabel } from "./numbering";
 
 const SYSTEM =
   "You read scanned handwritten student answer sheets. You transcribe what is " +
@@ -279,11 +280,17 @@ export async function extractAnswersFromPages(
     if (!(error instanceof ResponseTruncatedError) || images.length < 2) throw error;
 
     const half = Math.ceil(images.length / 2);
-    const halves = await Promise.all([
-      extractAnswersFromPages(images.slice(0, half), pageNumbers.slice(0, half), totalPages),
-      extractAnswersFromPages(images.slice(half), pageNumbers.slice(half), totalPages),
-    ]);
-    return halves.flat().sort(byReadingOrder);
+    const first = await extractAnswersFromPages(
+      images.slice(0, half),
+      pageNumbers.slice(0, half),
+      totalPages,
+    );
+    const second = await extractAnswersFromPages(
+      images.slice(half),
+      pageNumbers.slice(half),
+      totalPages,
+    );
+    return [...first, ...second].sort(byReadingOrder);
   }
 }
 
@@ -311,7 +318,9 @@ async function readBatch(
       if (!box || !transcription) return null;
 
       const page = allowed.has(block.page) ? block.page : pageNumbers[0];
-      const label = block.labelOnSheet?.trim();
+      // Read out of the transcription first: the number and the words came
+      // back together, so they cannot belong to different answers.
+      const label = leadingLabel(transcription) ?? block.labelOnSheet?.trim();
       const parts = buildParts(
         block.parts,
         lineBoxes,

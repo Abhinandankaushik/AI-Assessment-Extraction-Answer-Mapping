@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     // blocks back because every id in "results" refers to them.
     const parts = materialiseParts(questions, blocks ?? []);
 
-    const outcome = await mapAnswersToQuestions(questions, parts);
+    const outcome = mapAnswersToQuestions(questions, parts);
     const { results, summary } = await gradeAnswers(questions, parts, outcome);
 
     return NextResponse.json({

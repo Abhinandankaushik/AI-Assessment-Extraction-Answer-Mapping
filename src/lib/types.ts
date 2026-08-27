@@ -72,7 +72,7 @@ export interface AnswerBlock {
   partMarker?: string | null;
 }
 
-export type MatchBasis = "label" | "semantic" | "none";
+export type MatchBasis = "label" | "none";
 export type Verdict = "correct" | "partial" | "incorrect" | "unanswered";
 
 export interface QuestionResult {

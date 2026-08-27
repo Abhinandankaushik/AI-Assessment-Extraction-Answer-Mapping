@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bareSubPart,
   compactLabel,
+  leadingLabel,
   numberKey,
   parseQuestionNumber,
   shallowKey,
@@ -131,5 +132,27 @@ describe("labels the way papers and students actually write them", () => {
       parentNumber: null,
       subLabel: null,
     });
+  });
+});
+
+describe("leadingLabel", () => {
+  it.each([
+    ["Q.9) (C) 100% round and yellow", "9"],
+    ["Q.24) (b) (i) The transport system in plants", "24 (b) (i)"],
+    ["(22) (a) Lamp A -> Power = 50 W", "22 (a)"],
+    ["25. For a chemical change to occur", "25"],
+  ])("reads the number %s opens with", (text, expected) => {
+    expect(leadingLabel(text)).toBe(expected);
+  });
+
+  it.each([
+    "When 1 Joule of work is done to move",
+    "1 Joule of work per coulomb of charge",
+    "and roots is transported to buds.",
+    "(C) Starch into simple sugars",
+  ])("does not mistake %s for a question number", (text) => {
+    // A number needs the punctuation a question number is written with, or an
+    // answer that happens to open with a digit would claim that question.
+    expect(leadingLabel(text)).toBeNull();
   });
 });

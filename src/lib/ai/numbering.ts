@@ -102,3 +102,32 @@ export function lastSubPart(display: string): string | null {
   if (nested) return (nested[4] ?? nested[5]).toLowerCase();
   return parseQuestionNumber(cleaned).subLabel;
 }
+
+/**
+ * The question number an answer opens with, read out of the answer's own text.
+ *
+ * The extraction reports the number twice: once as a field of its own, and once
+ * inside the transcription, because the student wrote it there. Taking it from
+ * the text ties the number to the words that came back with it, so a block
+ * cannot end up carrying its neighbour's number.
+ *
+ * The digits must be followed by a bracket or a full stop — the punctuation a
+ * question number is written with — or an answer opening "1 Joule of work..."
+ * would announce itself as question 1.
+ */
+export function leadingLabel(text: string): string | null {
+  const trimmed = text.trim();
+  const number = trimmed.match(
+    /^(?:q(?:uestion)?\s*[.:-]?\s*)?\(?\s*(\d{1,2})\s*[.)]\s*/i,
+  );
+  if (!number) return null;
+
+  // Sub-parts are written in lower case and multiple-choice options in upper,
+  // so "Q.9) (C) 100% round" is question 9 with an option, not question 9 (c).
+  const subs = trimmed
+    .slice(number[0].length)
+    .match(/^((?:\(?\s*[a-z]{1,4}\s*[.)]\s*){1,2})/)?.[1]
+    ?.trim();
+
+  return subs ? `${number[1]} ${subs}` : number[1];
+}
