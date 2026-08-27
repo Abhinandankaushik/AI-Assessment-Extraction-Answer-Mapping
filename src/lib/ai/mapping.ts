@@ -101,14 +101,25 @@ export function materialiseParts(
  */
 const CONTINUATION_GAP = 0.04;
 
-/** True when `block` picks up directly where `prev` left off: same page, no
- *  real gap between them. A fresh answer leaves visible space above it. */
+/** How far down the next page a continuation can begin. An answer carried over
+ *  a page break starts at the top; anything lower had space above it. */
+const TOP_OF_PAGE = 0.15;
+
+/**
+ * True when `block` picks up directly where `prev` left off — either running on
+ * under it with no real gap, or opening the following page. A fresh answer
+ * leaves visible space above it, on whichever page it starts.
+ */
 function followsOn(prev: AnswerBlock | null, block: AnswerBlock): boolean {
   const above = prev?.regions[prev.regions.length - 1];
   const below = block.regions[0];
-  if (!above || !below || above.page !== below.page) return false;
-  const gap = below.box.y - (above.box.y + above.box.h);
-  return gap >= -CONTINUATION_GAP && gap <= CONTINUATION_GAP;
+  if (!above || !below) return false;
+
+  if (above.page === below.page) {
+    const gap = below.box.y - (above.box.y + above.box.h);
+    return gap >= -CONTINUATION_GAP && gap <= CONTINUATION_GAP;
+  }
+  return below.page === above.page + 1 && below.box.y <= TOP_OF_PAGE;
 }
 
 /** Consecutive parts of one written answer, kept together for matching. */

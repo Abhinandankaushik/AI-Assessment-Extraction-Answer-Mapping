@@ -391,3 +391,45 @@ describe("absorbTrailingFragments", () => {
     expect(absorbTrailingFragments(blocks, matches, ["b2"])).toEqual(["b2"]);
   });
 });
+
+describe("absorbTrailingFragments across a page break", () => {
+  it("gives the top of the next page back to the answer it continues", () => {
+    // "and roots is transported to buds." opened page 8, carrying on from an
+    // answer matched by content at the foot of page 7.
+    const blocks = [
+      block("b1", null, { page: 7, y: 0.7, h: 0.25 }),
+      block("b2", null, { page: 8, y: 0.06, h: 0.04 }),
+    ];
+    const matches: QuestionMatch[] = [
+      { questionId: "q1", blockIds: ["b1"], basis: "semantic", confidence: 0.8 },
+    ];
+
+    expect(absorbTrailingFragments(blocks, matches, ["b2"])).toEqual([]);
+    expect(matches[0].blockIds).toEqual(["b1", "b2"]);
+  });
+
+  it("leaves text that starts partway down a fresh page", () => {
+    // Space above it means the student began something new here.
+    const blocks = [
+      block("b1", null, { page: 7, y: 0.7, h: 0.25 }),
+      block("b2", null, { page: 8, y: 0.45, h: 0.1 }),
+    ];
+    const matches: QuestionMatch[] = [
+      { questionId: "q1", blockIds: ["b1"], basis: "semantic", confidence: 0.8 },
+    ];
+
+    expect(absorbTrailingFragments(blocks, matches, ["b2"])).toEqual(["b2"]);
+  });
+
+  it("does not reach across a skipped page", () => {
+    const blocks = [
+      block("b1", null, { page: 7, y: 0.7, h: 0.25 }),
+      block("b2", null, { page: 9, y: 0.06, h: 0.04 }),
+    ];
+    const matches: QuestionMatch[] = [
+      { questionId: "q1", blockIds: ["b1"], basis: "semantic", confidence: 0.8 },
+    ];
+
+    expect(absorbTrailingFragments(blocks, matches, ["b2"])).toEqual(["b2"]);
+  });
+});
