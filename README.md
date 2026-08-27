@@ -43,8 +43,24 @@ The line boxes are unioned into the single tight rectangle the UI draws.
 Answers that carry a written question number are matched **in plain code** by
 normalising both sides (`Q.22)(a)` and `22 (a)` both reduce to `22a`). That is
 exact, free, and stops the model from second-guessing a label the student wrote
-themselves. Unlabelled blocks marked as continuations attach to the answer
-directly above them — this is what keeps a multi-page answer whole.
+themselves.
+
+Two things decided in code rather than by the model do most of the work here:
+
+*Where an answer ends.* A long answer often comes back as several blocks, only
+the first of which carries the number. Text counts as a continuation when it
+runs on directly under the answer above it, or when it opens the following page
+— both measured from the bounding boxes, because the model's own
+`continuesFromPrevPage` flag misses short fragments. Text that starts after a
+gap, or partway down a fresh page, is left alone: that space is what a new
+answer looks like. The same rule runs again after the semantic pass, so
+fragments below an answer matched by content find their owner too.
+
+*Whether an answer has sub-parts.* A student may write "(a)" and "(b)" under one
+number, or number four observations "(i)" to "(iv)" inside a single answer.
+These look identical on the page, so the split is decided against the question
+paper: an answer is only broken apart when the paper prints a sub-question for
+**every** marker in it. Otherwise it stays whole, and highlights and marks as one.
 
 Only what is left over reaches the model, which matches by subject matter and is
 explicitly allowed to return "no match".
@@ -60,11 +76,14 @@ student's intent, not the OCR quality.
 | Requirement | How it is handled |
 | --- | --- |
 | Every question, printed order | Extraction + audit pass; recovered items spliced positionally |
-| `11 (a)` / `11 (b)` as separate entries | Enforced by schema and prompt; verified at 36/36 on the sample |
+| `11 (a)` / `11 (b)` as separate entries | Enforced by schema and prompt, re-checked by the audit pass, with a conservative code-level splitter behind both |
 | Answers written out of order | Matching is label-driven; sheet position is never assumed |
 | Unanswered questions | No block → `unanswered`, shown greyed with a red `0 / N` pill |
 | Answers matching no question | Collected into an **Unmatched answers** section under the list |
-| Answers spanning pages | `continuesFromPrevPage` blocks join the previous question; the viewer draws a highlight on every page involved |
+| Answers spanning pages | Continuations are detected from box geometry as well as the model's flag, within a page and across a page break; the viewer highlights every region and tags only the first |
+| Sub-parts bundled into one printed question | Split into separate rows, with the shared stem repeated so each reads on its own; a multiple-choice option list is explicitly not treated as sub-parts |
+| One written answer covering two sub-parts | Split at its "(a)"/"(b)" markers, each half with its own region — but only when the paper prints a sub-question for each |
+| The same question found by two passes | Deduped on the bare characters of the label, so "26 (b)" and "26(b)" cannot both become rows |
 | Exact region highlight | Normalised boxes re-projected as percentages over the rendered page |
 | PDF **or images** | Either slot takes one PDF or a stack of page photos; images are ordered numerically (page2 before page10) and flattened into one renumbered page list |
 | Processing progress | Real staged progress (`Reading → Questions → Answers → Mapping`) with a live bar |
@@ -88,11 +107,17 @@ Get a free key at <https://aistudio.google.com/apikey>.
 
 ## Tests
 
-`npm test` covers the three pure functions where a mistake is silent rather
-than loud — question-number normalisation, the union of line boxes into the
-rectangle the UI draws, and the deterministic label pass. Between them they
-pin the requirements that are easiest to regress: out-of-order answers,
-multi-page answers, sub-parts, and answers that match no question.
+`npm test` runs 69 unit tests over the pure functions where a mistake is silent
+rather than loud: question-number normalisation, the union of line boxes into
+the rectangle the UI draws, the deterministic label pass, the continuation
+rules, and both sub-part splitters.
+
+They pin the requirements that are easiest to regress — out-of-order answers,
+multi-page answers, sub-parts, answers matching no question — and each one that
+came out of a real run keeps its counter-case next to it: an answer is absorbed
+when it runs on, and left alone when a gap says it is something new; a marker
+list splits when the paper has parts for it, and does not when the paper has
+none.
 
 ## Deploying
 
