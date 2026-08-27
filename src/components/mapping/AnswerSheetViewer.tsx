@@ -21,8 +21,14 @@ function topWithinScroller(container: HTMLElement, el: HTMLElement): number {
 }
 
 export function AnswerSheetViewer() {
-  const { answerPages, blocks, results, questions, selectedQuestionId } =
-    useAppStore();
+  const {
+    answerPages,
+    blocks,
+    results,
+    questions,
+    selectedQuestionId,
+    selectedBlockId,
+  } = useAppStore();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -32,6 +38,18 @@ export function AnswerSheetViewer() {
   const zoom = ZOOM_STEPS[zoomIndex];
 
   const selected = useMemo(() => {
+    // An unmatched answer has no question to name it, so it is tagged with what
+    // the student wrote and drawn in the warning colour its card already uses.
+    if (selectedBlockId) {
+      const block = blocks.find((b) => b.id === selectedBlockId);
+      if (!block) return null;
+      const written = block.labelOnSheet?.trim().replace(/[.)\s]+$/, "");
+      return {
+        label: written ? `${written} · unmatched` : "Unmatched",
+        regions: block.regions,
+        tone: "unmatched" as const,
+      };
+    }
     if (!selectedQuestionId) return null;
     const result = results.find((r) => r.questionId === selectedQuestionId);
     if (!result || result.blockIds.length === 0) return null;
@@ -41,8 +59,25 @@ export function AnswerSheetViewer() {
     );
     // Papers print "25." or "22 (a)"; the tag reads better as Q25 / Q22 (a).
     const printed = question?.displayNumber?.trim().replace(/[.)\s]+$/, "");
-    return { label: printed ? `Q${printed}` : "", regions };
-  }, [selectedQuestionId, results, questions, blocks]);
+    return {
+      label: printed ? `Q${printed}` : "",
+      regions,
+      tone: "matched" as const,
+    };
+  }, [selectedBlockId, selectedQuestionId, results, questions, blocks]);
+
+  const accent =
+    selected?.tone === "unmatched"
+      ? {
+          line: "var(--color-warning)",
+          fill: "rgb(227 96 15 / 0.10)",
+          tag: "var(--color-warning)",
+        }
+      : {
+          line: "var(--color-hl-border)",
+          fill: "rgb(94 255 53 / 0.10)",
+          tag: "var(--color-success)",
+        };
 
   const regionsByPage = useMemo(() => {
     const map = new Map<number, AnswerRegion[]>();
@@ -199,13 +234,13 @@ export function AnswerSheetViewer() {
                     top: `${region.box.y * 100}%`,
                     width: `${region.box.w * 100}%`,
                     height: `${region.box.h * 100}%`,
-                    border: "2px solid var(--color-hl-border)",
-                    backgroundColor: "rgb(94 255 53 / 0.10)",
+                    border: `2px solid ${accent.line}`,
+                    backgroundColor: accent.fill,
                   }}
                 >
                   <span
                     className="t-p3-bold absolute -top-[30px] left-0 h-[30px] rounded-t-xl px-3 leading-[30px] text-white"
-                    style={{ backgroundColor: "var(--color-success)" }}
+                    style={{ backgroundColor: accent.tag }}
                   >
                     {selected?.label}
                   </span>

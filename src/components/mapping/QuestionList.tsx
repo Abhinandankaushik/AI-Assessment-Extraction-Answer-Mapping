@@ -105,8 +105,11 @@ function SummaryCard({
   );
 }
 
+/** Hunting for an unmatched answer by hand is the slow part of checking one,
+ *  so these cards select on the sheet exactly like a question does. */
 function UnmatchedAnswers() {
-  const { blocks, orphanBlockIds } = useAppStore();
+  const { blocks, orphanBlockIds, selectedBlockId, selectBlock } =
+    useAppStore();
   const orphans = blocks.filter((b) => orphanBlockIds.includes(b.id));
   if (orphans.length === 0) return null;
 
@@ -116,11 +119,22 @@ function UnmatchedAnswers() {
         Unmatched answers ({orphans.length})
       </h3>
       <p className="t-p5 mt-1 mb-3 px-1 text-muted">
-        Written on the sheet but not matching any question on the paper.
+        Written on the sheet but not matching any question on the paper. Click
+        one to find it on the sheet.
       </p>
       <div className="flex flex-col gap-2">
         {orphans.map((block) => (
-          <div key={block.id} className="rounded-card bg-surface p-3">
+          <button
+            key={block.id}
+            type="button"
+            onClick={() => selectBlock(block.id)}
+            aria-pressed={selectedBlockId === block.id}
+            className={`rounded-card bg-surface p-3 text-left transition-all ${
+              selectedBlockId === block.id
+                ? "border-2 border-warning"
+                : "border-2 border-transparent hover:bg-surface-2"
+            }`}
+          >
             <p className="t-p5 text-muted">
               {block.labelOnSheet
                 ? `Labelled “${block.labelOnSheet}”`
@@ -130,7 +144,7 @@ function UnmatchedAnswers() {
             <p className="t-p5 mt-1 line-clamp-3 text-ink">
               {block.transcription}
             </p>
-          </div>
+          </button>
         ))}
       </div>
     </section>

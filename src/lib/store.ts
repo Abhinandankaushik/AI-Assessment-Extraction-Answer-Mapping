@@ -44,6 +44,9 @@ interface AppState extends Omit<RunData, "summary"> {
   progress: Progress;
   error: string | null;
   selectedQuestionId: string | null;
+  /** An unmatched answer the teacher clicked, highlighted on the sheet the
+   *  same way a question's answer is. */
+  selectedBlockId: string | null;
   sidebarCollapsed: boolean;
   /** Identifies the upload a completed run belongs to, so returning to
    *  /review with the same files shows the result instead of paying for it
@@ -57,6 +60,7 @@ interface AppState extends Omit<RunData, "summary"> {
   setProgress: (progress: Progress) => void;
   fail: (message: string) => void;
   selectQuestion: (questionId: string | null) => void;
+  selectBlock: (blockId: string | null) => void;
   toggleSidebar: () => void;
   loadRun: (run: RunData, runKey?: string | null) => void;
   reset: () => void;
@@ -74,6 +78,7 @@ const EMPTY = {
   summary: null as GradingSummary | null,
   orphanBlockIds: [],
   selectedQuestionId: null,
+  selectedBlockId: null,
   sidebarCollapsed: false,
   runKey: null,
 };
@@ -111,7 +116,11 @@ export const useAppStore = create<AppState>((set) => ({
   setPhase: (phase) => set({ phase }),
   setProgress: (progress) => set({ progress }),
   fail: (message) => set({ phase: "error", error: message }),
-  selectQuestion: (selectedQuestionId) => set({ selectedQuestionId }),
+  // Only one thing is highlighted at a time, so each selection clears the other.
+  selectQuestion: (selectedQuestionId) =>
+    set({ selectedQuestionId, selectedBlockId: null }),
+  selectBlock: (selectedBlockId) =>
+    set({ selectedBlockId, selectedQuestionId: null }),
   toggleSidebar: () =>
     set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 
@@ -124,6 +133,7 @@ export const useAppStore = create<AppState>((set) => ({
       progress: { stage: "done", label: "Done", value: 1 },
       selectedQuestionId:
         run.results.find((r) => r.blockIds.length > 0)?.questionId ?? null,
+      selectedBlockId: null,
     }),
 
   reset: () => set(EMPTY),
