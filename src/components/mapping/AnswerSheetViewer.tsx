@@ -4,9 +4,20 @@ import { ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { highlightBands } from "@/lib/highlight";
 import { useAppStore } from "@/lib/store";
-import type { AnswerRegion } from "@/lib/types";
+import type { AnswerBlock, AnswerRegion } from "@/lib/types";
 
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+/**
+ * Every block the model located, drawn exactly where it said, with the number
+ * it read there. Nothing corrects or snaps these — that is the point: they show
+ * what the extraction actually returned, so a box sitting a line off its
+ * handwriting is visible instead of being inferred from a wrong highlight.
+ *
+ * Development only. A real run has to be on screen for it to show anything, so
+ * it lives here as a toggle rather than a route of its own.
+ */
+const INSPECTABLE = process.env.NODE_ENV !== "production";
 
 /** Drops the punctuation a label trails — "25." and "26)" become "25" and "26"
  *  — while leaving a bracketed sub-part like "22 (a)" intact. */
@@ -44,6 +55,7 @@ export function AnswerSheetViewer() {
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [zoomIndex, setZoomIndex] = useState(2);
   const [currentPage, setCurrentPage] = useState(1);
+  const [inspecting, setInspecting] = useState(false);
 
   const zoom = ZOOM_STEPS[zoomIndex];
 
@@ -98,6 +110,17 @@ export function AnswerSheetViewer() {
         .sort((x, y) => x.page - y.page || x.box.y - y.box.y)[0] ?? null,
     [selected],
   );
+
+  const rawByPage = useMemo(() => {
+    const map = new Map<number, { block: AnswerBlock; region: AnswerRegion }[]>();
+    if (!inspecting) return map;
+    for (const block of blocks) {
+      for (const region of block.regions) {
+        map.set(region.page, [...(map.get(region.page) ?? []), { block, region }]);
+      }
+    }
+    return map;
+  }, [inspecting, blocks]);
 
   const regionsByPage = useMemo(() => {
     const map = new Map<number, AnswerRegion[]>();
@@ -167,7 +190,21 @@ export function AnswerSheetViewer() {
           borderBottom: "1.25px solid rgb(0 0 0 / 0.1)",
         }}
       >
-        <h2 className="t-p3-bold text-white">Answer Sheet</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="t-p3-bold text-white">Answer Sheet</h2>
+          {INSPECTABLE && (
+            <button
+              type="button"
+              onClick={() => setInspecting((on) => !on)}
+              aria-pressed={inspecting}
+              className={`t-p5 rounded-pill px-3 py-1 transition-colors ${
+                inspecting ? "bg-white text-ink" : "bg-[#464646] text-white"
+              }`}
+            >
+              {blocks.length} blocks
+            </button>
+          )}
+        </div>
 
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 rounded-pill bg-[#464646] px-2 py-1 text-white">
@@ -248,6 +285,25 @@ export function AnswerSheetViewer() {
                 height={page.height}
                 className="block h-auto w-full"
               />
+
+              {(rawByPage.get(page.index + 1) ?? []).map(({ block, region }) => (
+                <div
+                  key={`raw-${block.id}`}
+                  className="pointer-events-none absolute"
+                  style={{
+                    left: `${region.box.x * 100}%`,
+                    top: `${region.box.y * 100}%`,
+                    width: `${region.box.w * 100}%`,
+                    height: `${region.box.h * 100}%`,
+                    border: "1px solid rgb(37 99 235 / 0.9)",
+                    backgroundColor: "rgb(37 99 235 / 0.06)",
+                  }}
+                >
+                  <span className="absolute -top-[14px] left-0 h-[14px] rounded-sm bg-blue-600 px-1 text-[10px] leading-[14px] whitespace-nowrap text-white">
+                    {block.id} · {block.labelOnSheet ?? "no label"}
+                  </span>
+                </div>
+              ))}
 
               {(regionsByPage.get(page.index + 1) ?? []).map((region, i) => (
                 <div
