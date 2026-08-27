@@ -64,17 +64,21 @@ export function materialiseParts(
   questions: ExtractedQuestion[],
   blocks: AnswerBlock[],
 ): AnswerBlock[] {
+  // The deepest level, matching openSibling and the bare-marker branch. Reading
+  // subLabel here instead called "24 (b)(i)" a "b", so an answer marked (i) and
+  // (ii) matched nothing and was never split.
   const subLabelsOf = (parent: string) =>
     new Set(
       questions
-        .filter((q) => q.parentNumber === parent && q.subLabel)
-        .map((q) => q.subLabel as string),
+        .filter((q) => q.parentNumber === parent)
+        .map((q) => lastSubPart(q.displayNumber))
+        .filter((label): label is string => Boolean(label)),
     );
 
   const parents = [
     ...new Set(
       questions
-        .map((q) => (q.subLabel ? q.parentNumber : null))
+        .map((q) => (lastSubPart(q.displayNumber) ? q.parentNumber : null))
         .filter((n): n is string => Boolean(n)),
     ),
   ];
@@ -127,24 +131,40 @@ export function materialiseParts(
  */
 const CONTINUATION_GAP = 0.04;
 
-/** How far down the next page a continuation can begin. An answer carried over
- *  a page break starts at the top; anything lower had space above it. */
-const TOP_OF_PAGE = 0.15;
+/**
+ * How far down a fresh page a continuation can begin.
+ *
+ * Generous, because an answer booklet prints a header and a QR band across the
+ * top of every page: the first handwriting on a page routinely starts a quarter
+ * of the way down, and a tighter threshold left the second half of an answer
+ * stranded as "unmatched". What keeps this honest is not the number but the
+ * adjacency it is paired with — the block must be the very next thing written.
+ */
+const TOP_OF_PAGE = 0.45;
 
 /**
- * True when `block` picks up directly where `prev` left off — either running on
- * under it with no real gap, or opening the following page. A fresh answer
- * leaves visible space above it, on whichever page it starts.
+ * True when `block` picks up directly where `prev` left off on the same page:
+ * no real gap between them. A fresh answer leaves visible space above it.
  */
 function followsOn(prev: AnswerBlock | null, block: AnswerBlock): boolean {
   const above = prev?.regions[prev.regions.length - 1];
   const below = block.regions[0];
-  if (!above || !below) return false;
+  if (!above || !below || above.page !== below.page) return false;
+  const gap = below.box.y - (above.box.y + above.box.h);
+  return gap >= -CONTINUATION_GAP && gap <= CONTINUATION_GAP;
+}
 
-  if (above.page === below.page) {
-    const gap = below.box.y - (above.box.y + above.box.h);
-    return gap >= -CONTINUATION_GAP && gap <= CONTINUATION_GAP;
-  }
+/**
+ * True when `block` opens the page after `prev` ends.
+ *
+ * Only sound when the caller knows the two are adjacent in reading order, since
+ * that is what makes `block` the first thing written on its page — which is
+ * where an answer carried over a page break resumes.
+ */
+function opensNextPage(prev: AnswerBlock | null, block: AnswerBlock): boolean {
+  const above = prev?.regions[prev.regions.length - 1];
+  const below = block.regions[0];
+  if (!above || !below) return false;
   return below.page === above.page + 1 && below.box.y <= TOP_OF_PAGE;
 }
 
@@ -222,7 +242,14 @@ export function matchByLabel(
     }
   };
 
-  for (const unit of groupUnits(blocks)) {
+  const units = groupUnits(blocks);
+  for (const [index, unit] of units.entries()) {
+    // The block immediately before this one in reading order, assigned or not.
+    // Only when that block is also the last one assigned does a page break mean
+    // "this answer continues" rather than "something else was written between".
+    const before = units[index - 1];
+    const previousBlock = before ? before[before.length - 1] : null;
+
     // A group is one answer the student split at "(a)"/"(b)". It is matched as
     // a whole, because a bare marker at its head names a part, not a question -
     // reading it as a continuation would bury the answer under the one above.
@@ -288,13 +315,15 @@ export function matchByLabel(
       }
 
       // Students often write the parent number only ("Q.24") on a paper that
-      // prints just sub-parts. When exactly one sub-part is still open that is
-      // unambiguous; when several are, leave it for the semantic pass rather
-      // than guessing which one they meant.
+      // prints just sub-parts. Give it the first sub-part still open: students
+      // answer parts in order, and holding the question open is what lets the
+      // bare "(b)" written underneath find its own sibling. Refusing to choose
+      // sent the whole run to the semantic pass, which then had nothing but
+      // subject matter to go on and filed the answers under other questions.
       const openSubParts = questions.filter(
         (q) => q.parentNumber === key && q.subLabel && !assigned.has(q.id),
       );
-      if (openSubParts.length === 1) {
+      if (openSubParts.length > 0) {
         push(openSubParts[0].id, block.id);
         currentQuestionId = openSubParts[0].id;
         lastAssigned = block;
@@ -315,13 +344,19 @@ export function matchByLabel(
     // page. Both are measured against where that answer ended, which is what
     // stops an answer halfway down a later page being swept up with it.
     const continues =
-      block.continuesFromPrevPage || followsOn(lastAssigned, block);
+      block.continuesFromPrevPage ||
+      followsOn(lastAssigned, block) ||
+      (previousBlock === lastAssigned && opensNextPage(lastAssigned, block));
     if (continues && currentQuestionId) {
       push(currentQuestionId, block.id);
       lastAssigned = block;
       continue;
     }
 
+    // Whatever comes next is no longer directly under the answer we were
+    // following: this block now sits between them.
+    currentQuestionId = null;
+    lastAssigned = null;
     leftovers.push(block);
   }
 
@@ -386,13 +421,33 @@ Rules:
       });
 
       const open = new Set(stillOpen.map((q) => q.id));
+      const parentOf = new Map(stillOpen.map((q) => [q.id, q.parentNumber]));
       const taken = new Set<string>();
+      // One reply, one decision per answer. Without this a repeated blockId put
+      // the same answer under two questions, or matched it and listed it as
+      // unmatched at the same time.
+      const decided = new Set<string>();
 
       for (const m of result.matches ?? []) {
         const block = leftovers.find((b) => b.id === m.blockId);
-        if (!block) continue;
+        if (!block || decided.has(block.id)) continue;
+        decided.add(block.id);
+
+        // A number the student wrote outranks the model's reading of the
+        // subject matter. Matching against it filed answers under questions
+        // they were plainly not written for.
+        const written = block.labelOnSheet
+          ? parentNumberOf(block.labelOnSheet)
+          : null;
+        const contradicted =
+          written !== null &&
+          m.questionId != null &&
+          (parentOf.get(m.questionId) ?? null) !== null &&
+          parentOf.get(m.questionId) !== written;
+
         if (
           m.questionId &&
+          !contradicted &&
           open.has(m.questionId) &&
           !taken.has(m.questionId) &&
           m.confidence >= 0.35
@@ -470,9 +525,11 @@ export function absorbTrailingFragments(
     // label at all can belong to whatever came before.
     if (block.labelOnSheet && !bareSubPart(block.labelOnSheet)) continue;
 
+    // Adjacent in reading order by construction, so a page break here really
+    // is this answer resuming at the top of the next page.
     const above = blocks[i - 1];
     const owner = owners.get(above.id);
-    if (!owner || !followsOn(above, block)) continue;
+    if (!owner || !(followsOn(above, block) || opensNextPage(above, block))) continue;
 
     owner.blockIds.push(block.id);
     owners.set(block.id, owner);
@@ -527,7 +584,7 @@ export function snapGroups(
       const sibling = questions.find(
         (q) =>
           q.parentNumber === parentNumber &&
-          q.subLabel === part.partMarker &&
+          lastSubPart(q.displayNumber) === part.partMarker &&
           !answered.has(q.id),
       );
       if (!sibling) continue;

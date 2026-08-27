@@ -80,14 +80,19 @@ describe("matchByLabel", () => {
     expect(assigned.get("q1")).toEqual(["b2"]);
   });
 
-  it("refuses to guess when a parent-only label fits several sub-parts", () => {
+  it("gives a parent-only label the first sub-part still open", () => {
+    // Students answer parts in order. Refusing to choose sent the whole run to
+    // the semantic pass, which had only subject matter to go on and filed the
+    // answers under other questions entirely.
     const questions = ["24 (a)", "24 (b)"].map(question);
     const { assigned, leftovers } = matchByLabel(questions, [
-      block("b1", "Q.24)"),
+      block("b1", "Q.24)", { y: 0.1, h: 0.1 }),
+      block("b2", "(b)", { y: 0.3, h: 0.1 }),
     ]);
 
-    expect(assigned.size).toBe(0);
-    expect(leftovers.map((b) => b.id)).toEqual(["b1"]);
+    expect(assigned.get("q0")).toEqual(["b1"]);
+    expect(assigned.get("q1")).toEqual(["b2"]);
+    expect(leftovers).toEqual([]);
   });
 
   it("folds a bare sub-part marker into the answer above it", () => {
@@ -408,11 +413,26 @@ describe("absorbTrailingFragments across a page break", () => {
     expect(matches[0].blockIds).toEqual(["b1", "b2"]);
   });
 
-  it("leaves text that starts partway down a fresh page", () => {
-    // Space above it means the student began something new here.
+  it("clears the printed header a page carries above the handwriting", () => {
+    // An answer booklet prints a header and QR band across the top of every
+    // page, so a continuation starts a quarter of the way down, not at the edge.
     const blocks = [
       block("b1", null, { page: 7, y: 0.7, h: 0.25 }),
-      block("b2", null, { page: 8, y: 0.45, h: 0.1 }),
+      block("b2", null, { page: 8, y: 0.28, h: 0.1 }),
+    ];
+    const matches: QuestionMatch[] = [
+      { questionId: "q1", blockIds: ["b1"], basis: "semantic", confidence: 0.8 },
+    ];
+
+    expect(absorbTrailingFragments(blocks, matches, ["b2"])).toEqual([]);
+    expect(matches[0].blockIds).toEqual(["b1", "b2"]);
+  });
+
+  it("leaves text that starts well down a fresh page", () => {
+    // Half a blank page above it means the student began something new here.
+    const blocks = [
+      block("b1", null, { page: 7, y: 0.7, h: 0.25 }),
+      block("b2", null, { page: 8, y: 0.62, h: 0.1 }),
     ];
     const matches: QuestionMatch[] = [
       { questionId: "q1", blockIds: ["b1"], basis: "semantic", confidence: 0.8 },
@@ -489,5 +509,29 @@ describe("materialiseParts against the right question", () => {
     expect(
       materialiseParts(questions, [withParts("p1b1", null, ["a", "b", "c"])]),
     ).toHaveLength(3);
+  });
+});
+
+describe("matchByLabel keeps its bearings", () => {
+  it("stops following an answer once something else is written between", () => {
+    // b2 belongs to nothing, so b3 below it is not a continuation of q0.
+    const questions = ["1", "2"].map(question);
+    const { assigned, leftovers } = matchByLabel(questions, [
+      block("b1", "Q.1)", { y: 0.1, h: 0.1 }),
+      block("b2", null, { y: 0.6, h: 0.1 }),
+      block("b3", null, { y: 0.71, h: 0.1 }),
+    ]);
+
+    expect(assigned.get("q0")).toEqual(["b1"]);
+    expect(leftovers.map((b) => b.id)).toEqual(["b2", "b3"]);
+  });
+
+  it("splits an answer marked (i) and (ii) against a nested paper", () => {
+    const questions = ["24 (b)(i)", "24 (b)(ii)"].map(question);
+    const out = materialiseParts(questions, [
+      withParts("p8b1", "Q.24)(b)", ["i", "ii"]),
+    ]);
+
+    expect(out.map((b) => b.partMarker)).toEqual(["i", "ii"]);
   });
 });
