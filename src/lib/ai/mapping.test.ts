@@ -81,6 +81,52 @@ describe("matchByLabel", () => {
     expect(leftovers.map((b) => b.id)).toEqual(["b1"]);
   });
 
+  it("folds a bare sub-part marker into the answer above it", () => {
+    const questions = ["26"].map(question); // paper prints one question 26
+    const { assigned, leftovers } = matchByLabel(questions, [
+      block("b1", "Q.26)"),
+      block("b2", "(b)"), // student marked the second half, no number
+    ]);
+
+    expect(assigned.get("q0")).toEqual(["b1", "b2"]);
+    expect(leftovers).toEqual([]);
+  });
+
+  it("sends a bare sub-part to its own printed sub-part when there is one", () => {
+    const questions = ["23 (a)", "23 (b)"].map(question);
+    const { assigned, leftovers } = matchByLabel(questions, [
+      block("b1", "Q.23)(a)"),
+      block("b2", "(b)"),
+    ]);
+
+    expect(assigned.get("q0")).toEqual(["b1"]);
+    expect(assigned.get("q1")).toEqual(["b2"]);
+    expect(leftovers).toEqual([]);
+  });
+
+  it("treats unlabelled text opening a page as a continuation", () => {
+    const questions = ["24"].map(question);
+    const { assigned, leftovers } = matchByLabel(questions, [
+      block("b1", "Q.24)", { page: 8 }),
+      // The model reported continuesFromPrevPage: false for this fragment.
+      block("b2", null, { page: 9 }),
+    ]);
+
+    expect(assigned.get("q0")).toEqual(["b1", "b2"]);
+    expect(leftovers).toEqual([]);
+  });
+
+  it("does not swallow unlabelled text that starts mid-page", () => {
+    const questions = ["1", "2"].map(question);
+    const { assigned, leftovers } = matchByLabel(questions, [
+      block("b1", "Q.1)", { page: 1 }),
+      block("b2", null, { page: 1 }),
+    ]);
+
+    expect(assigned.get("q0")).toEqual(["b1"]);
+    expect(leftovers.map((b) => b.id)).toEqual(["b2"]);
+  });
+
   it("leaves an answer with no matching question unassigned", () => {
     const questions = ["1", "2"].map(question);
     const { assigned, leftovers } = matchByLabel(questions, [

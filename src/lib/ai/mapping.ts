@@ -5,7 +5,7 @@ import type {
   MatchBasis,
 } from "@/lib/types";
 import { ThinkingLevel, generateJson } from "./client";
-import { numberKey } from "./numbering";
+import { bareSubPart, numberKey } from "./numbering";
 
 export interface QuestionMatch {
   questionId: string;
@@ -72,6 +72,17 @@ export function matchByLabel(
     assigned.set(questionId, list);
   };
 
+  // Blocks arrive in reading order, so "first on its page" identifies text that
+  // carried over from the page before.
+  const firstOnPage = new Set<string>();
+  const seenPages = new Set<number>();
+  for (const block of blocks) {
+    const page = block.regions[0]?.page;
+    if (page === undefined || seenPages.has(page)) continue;
+    seenPages.add(page);
+    firstOnPage.add(block.id);
+  }
+
   for (const block of blocks) {
     if (block.labelOnSheet) {
       const key = numberKey(block.labelOnSheet);
@@ -79,6 +90,25 @@ export function matchByLabel(
       if (questionId) {
         push(questionId, block.id);
         currentQuestionId = questionId;
+        continue;
+      }
+
+      // A bare sub-part marker — the student wrote "Q.26)" once and then just
+      // "(b)" on the next line. It belongs to the numbered answer above it,
+      // either as its own printed sub-part or folded into the parent.
+      const bareSub = bareSubPart(block.labelOnSheet);
+      if (bareSub && currentQuestionId) {
+        const openId: string = currentQuestionId;
+        const parent = questions.find((q) => q.id === openId);
+        const sibling = questions.find(
+          (q) =>
+            q.parentNumber === parent?.parentNumber &&
+            q.subLabel === bareSub &&
+            !assigned.has(q.id),
+        );
+        const target = sibling?.id ?? openId;
+        push(target, block.id);
+        currentQuestionId = target;
         continue;
       }
 
@@ -101,9 +131,13 @@ export function matchByLabel(
       continue;
     }
 
-    // Unlabelled continuation of the answer immediately above it — this is how
-    // an answer that runs over a page break stays attached to its question.
-    if (block.continuesFromPrevPage && currentQuestionId) {
+    // Unlabelled text belongs to the answer above it. The model's
+    // `continuesFromPrevPage` flag is the clear signal, but it misses short
+    // fragments, so text opening a fresh page under a matched answer counts
+    // too — that is exactly what a page-break continuation looks like.
+    const continues =
+      block.continuesFromPrevPage || firstOnPage.has(block.id);
+    if (continues && currentQuestionId) {
       push(currentQuestionId, block.id);
       continue;
     }

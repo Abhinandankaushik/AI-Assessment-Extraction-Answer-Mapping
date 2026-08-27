@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { numberKey, parseQuestionNumber } from "./numbering";
+import { bareSubPart, numberKey, parseQuestionNumber } from "./numbering";
 
 describe("parseQuestionNumber", () => {
   it("splits a printed sub-part into parent and label", () => {
@@ -48,4 +48,20 @@ describe("numberKey", () => {
     expect(numberKey("Q.24)")).toBe("24");
     expect(numberKey("24 (b)")).toBe("24b");
   });
+});
+
+describe("bareSubPart", () => {
+  it.each(["(b)", "b)", "b.", " (B) ", "(ii)", "iii)"])(
+    "reads %s as a sub-part marker",
+    (input) => {
+      expect(bareSubPart(input)).toBe(input.trim().replace(/[().\s]/g, "").toLowerCase());
+    },
+  );
+
+  it.each(["Q.26)", "26 (b)", "the", "and", ""])(
+    "does not read %s as a sub-part marker",
+    (input) => {
+      expect(bareSubPart(input)).toBeNull();
+    },
+  );
 });

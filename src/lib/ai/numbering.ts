@@ -15,6 +15,20 @@ export function parseQuestionNumber(display: string): {
   };
 }
 
+/**
+ * A label that is only a sub-part marker — "(b)", "ii)", "(iii)" — with no
+ * question number in front of it. On an answer sheet this always refers back to
+ * the numbered answer above, so the mapper resolves it by position rather than
+ * by key.
+ */
+export function bareSubPart(label: string): string | null {
+  // Restricted to plausible markers so a stray short word is never taken for one.
+  const match = label
+    .trim()
+    .match(/^\(?\s*([a-h]|i{1,3}|iv|vi{0,3}|ix|x)\s*[).]?\s*$/i);
+  return match ? match[1].toLowerCase() : null;
+}
+
 /** Normalised key used to match a label written on an answer sheet ("Q11(a).")
  *  against a question number printed on the paper ("11 (a)"). */
 export function numberKey(display: string): string {
