@@ -92,6 +92,25 @@ export function materialiseParts(
   });
 }
 
+/**
+ * How far below an answer unlabelled text can start and still be a continuation
+ * of it, as a fraction of page height — a little over one written line.
+ *
+ * Deliberately tight: text wrongly attached here is never reconsidered, while
+ * text left behind still gets its chance at the semantic pass.
+ */
+const CONTINUATION_GAP = 0.04;
+
+/** True when `block` picks up directly where `prev` left off: same page, no
+ *  real gap between them. A fresh answer leaves visible space above it. */
+function followsOn(prev: AnswerBlock | null, block: AnswerBlock): boolean {
+  const above = prev?.regions[prev.regions.length - 1];
+  const below = block.regions[0];
+  if (!above || !below || above.page !== below.page) return false;
+  const gap = below.box.y - (above.box.y + above.box.h);
+  return gap >= -CONTINUATION_GAP && gap <= CONTINUATION_GAP;
+}
+
 /** Consecutive parts of one written answer, kept together for matching. */
 function groupUnits(blocks: AnswerBlock[]): AnswerBlock[][] {
   const units: AnswerBlock[][] = [];
@@ -125,6 +144,7 @@ export function matchByLabel(
   const assigned = new Map<string, string[]>();
   const leftovers: AnswerBlock[] = [];
   let currentQuestionId: string | null = null;
+  let lastAssigned: AnswerBlock | null = null;
 
   const push = (questionId: string, blockId: string) => {
     const list = assigned.get(questionId) ?? [];
@@ -154,6 +174,7 @@ export function matchByLabel(
       const target = sibling?.id ?? fallbackId;
       push(target, part.id);
       currentQuestionId = target;
+      lastAssigned = part;
     }
   };
 
@@ -195,6 +216,7 @@ export function matchByLabel(
       }
 
       currentQuestionId = null;
+      lastAssigned = null;
       leftovers.push(...unit);
       continue;
     }
@@ -206,6 +228,7 @@ export function matchByLabel(
       if (questionId) {
         push(questionId, block.id);
         currentQuestionId = questionId;
+        lastAssigned = block;
         continue;
       }
 
@@ -225,6 +248,7 @@ export function matchByLabel(
         const target = sibling?.id ?? openId;
         push(target, block.id);
         currentQuestionId = target;
+        lastAssigned = block;
         continue;
       }
 
@@ -238,23 +262,31 @@ export function matchByLabel(
       if (openSubParts.length === 1) {
         push(openSubParts[0].id, block.id);
         currentQuestionId = openSubParts[0].id;
+        lastAssigned = block;
         continue;
       }
       // A label that matches nothing: could be a misread digit or a genuine
       // stray answer, so let the semantic pass decide.
       currentQuestionId = null;
+      lastAssigned = null;
       leftovers.push(block);
       continue;
     }
 
     // Unlabelled text belongs to the answer above it. The model's
-    // `continuesFromPrevPage` flag is the clear signal, but it misses short
-    // fragments, so text opening a fresh page under a matched answer counts
-    // too — that is exactly what a page-break continuation looks like.
+    // `continuesFromPrevPage` flag is the clear signal but it misses short
+    // fragments, so two more shapes count: text opening a fresh page, which is
+    // what a page-break continuation looks like, and text running straight on
+    // under the previous answer, which is what the rest of a long answer looks
+    // like. Text that starts after a gap is left for the semantic pass, since
+    // that is where an unnumbered answer of its own would sit.
     const continues =
-      block.continuesFromPrevPage || firstOnPage.has(block.id);
+      block.continuesFromPrevPage ||
+      firstOnPage.has(block.id) ||
+      followsOn(lastAssigned, block);
     if (continues && currentQuestionId) {
       push(currentQuestionId, block.id);
+      lastAssigned = block;
       continue;
     }
 

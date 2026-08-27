@@ -25,14 +25,17 @@ function question(displayNumber: string, index: number): ExtractedQuestion {
 function block(
   id: string,
   labelOnSheet: string | null,
-  options: { continues?: boolean; page?: number } = {},
+  options: { continues?: boolean; page?: number; y?: number; h?: number } = {},
 ): AnswerBlock {
   return {
     id,
     labelOnSheet,
     transcription: `answer ${id}`,
     regions: [
-      { page: options.page ?? 1, box: { x: 0.1, y: 0.1, w: 0.5, h: 0.1 } },
+      {
+        page: options.page ?? 1,
+        box: { x: 0.1, y: options.y ?? 0.1, w: 0.5, h: options.h ?? 0.1 },
+      },
     ],
     continuesFromPrevPage: options.continues ?? false,
   };
@@ -121,11 +124,26 @@ describe("matchByLabel", () => {
     expect(leftovers).toEqual([]);
   });
 
-  it("does not swallow unlabelled text that starts mid-page", () => {
+  it("keeps the rest of a long answer that runs on below it", () => {
+    // The tail of Q25 came back as its own unlabelled block, directly under
+    // the part that carried the number.
+    const questions = ["25", "26"].map(question);
+    const { assigned, leftovers } = matchByLabel(questions, [
+      block("b1", "Q.25)", { y: 0.1, h: 0.2 }),
+      block("b2", null, { y: 0.31, h: 0.06 }),
+    ]);
+
+    expect(assigned.get("q0")).toEqual(["b1", "b2"]);
+    expect(leftovers).toEqual([]);
+  });
+
+  it("does not swallow unlabelled text that starts after a gap", () => {
+    // Space above it is what an unnumbered answer of its own looks like, so
+    // this goes to the semantic pass rather than onto the answer above.
     const questions = ["1", "2"].map(question);
     const { assigned, leftovers } = matchByLabel(questions, [
-      block("b1", "Q.1)", { page: 1 }),
-      block("b2", null, { page: 1 }),
+      block("b1", "Q.1)", { y: 0.1, h: 0.1 }),
+      block("b2", null, { y: 0.55 }),
     ]);
 
     expect(assigned.get("q0")).toEqual(["b1"]);
@@ -146,8 +164,8 @@ describe("matchByLabel", () => {
   it("does not attach a stray continuation to an unrelated question", () => {
     const questions = ["1"].map(question);
     const { assigned, leftovers } = matchByLabel(questions, [
-      block("b1", "Q.99)"), // unmatched, so nothing to continue from
-      block("b2", null, { continues: true }),
+      block("b1", "Q.99)", { y: 0.1, h: 0.1 }), // unmatched: nothing to continue
+      block("b2", null, { continues: true, y: 0.21 }),
     ]);
 
     expect(assigned.size).toBe(0);
