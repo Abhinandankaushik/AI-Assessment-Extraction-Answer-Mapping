@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { bareSubPart, numberKey, parseQuestionNumber } from "./numbering";
+import {
+  bareSubPart,
+  compactLabel,
+  numberKey,
+  parseQuestionNumber,
+} from "./numbering";
 
 describe("parseQuestionNumber", () => {
   it("splits a printed sub-part into parent and label", () => {
@@ -64,4 +69,17 @@ describe("bareSubPart", () => {
       expect(bareSubPart(input)).toBeNull();
     },
   );
+});
+
+describe("compactLabel", () => {
+  it("collapses the same label written with different spacing", () => {
+    const keys = ["26 (b)", "26(b)", "26 b", "26. (B)"].map(compactLabel);
+    expect(new Set(keys).size).toBe(1);
+  });
+
+  it("keeps labels that are genuinely different apart", () => {
+    // Two passes both reporting "24 (b)(i)" must dedupe; "(ii)" must not.
+    expect(compactLabel("24 (b)(i)")).not.toBe(compactLabel("24 (b)(ii)"));
+    expect(compactLabel("26 (a)")).not.toBe(compactLabel("26 (b)"));
+  });
 });

@@ -41,6 +41,15 @@ export function leadingSubPart(text: string): string | null {
   return match ? match[1].toLowerCase() : null;
 }
 
+/**
+ * A printed label stripped to its bare characters, so the same question written
+ * "26 (b)", "26(b)" and "26 b" collapses to one key while "24 (b)(i)" and
+ * "24 (b)(ii)" stay apart.
+ */
+export function compactLabel(display: string): string {
+  return display.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 /** Normalised key used to match a label written on an answer sheet ("Q11(a).")
  *  against a question number printed on the paper ("11 (a)"). */
 export function numberKey(display: string): string {

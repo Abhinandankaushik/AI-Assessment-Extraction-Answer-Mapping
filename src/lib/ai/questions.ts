@@ -1,7 +1,7 @@
 import { Type } from "@google/genai";
 import type { ExtractedQuestion } from "@/lib/types";
 import { ThinkingLevel, generateJson, type ImagePart } from "./client";
-import { parseQuestionNumber } from "./numbering";
+import { compactLabel, parseQuestionNumber } from "./numbering";
 
 const SYSTEM =
   "You transcribe printed exam papers with forensic accuracy. You never invent, " +
@@ -102,6 +102,18 @@ export function splitInlineSubParts(q: RawQuestion): RawQuestion[] {
   }));
 }
 
+/** One row per printed label. Two passes and two splitters feed this list, so
+ *  the same question can reach it more than once under different spacing. */
+function dedupe(questions: RawQuestion[]): RawQuestion[] {
+  const seen = new Set<string>();
+  return questions.filter((q) => {
+    const key = compactLabel(q.displayNumber);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /** Sort key that mirrors how a paper is actually laid out. */
 function rank(q: RawQuestion): [number, number, number] {
   const { parentNumber, subLabel } = parseQuestionNumber(q.displayNumber);
@@ -138,7 +150,10 @@ export async function extractQuestions(
   });
 
   const found = first.questions ?? [];
-  const seen = new Set(found.map((q) => q.displayNumber.trim().toLowerCase()));
+  // Keyed on the bare characters: the audit reports "26(b)" for a first pass
+  // that said "26 (b)", and comparing those as strings let the same question
+  // through twice - once answered, once showing as not attempted.
+  const seen = new Set(found.map((q) => compactLabel(q.displayNumber)));
 
   let audited = found;
   try {
@@ -163,15 +178,11 @@ Return empty arrays if the list is already correct.`,
       thinking: ThinkingLevel.LOW,
     });
 
-    const spurious = new Set(
-      (audit.spurious ?? []).map((s) => s.trim().toLowerCase()),
-    );
-    audited = found.filter(
-      (q) => !spurious.has(q.displayNumber.trim().toLowerCase()),
-    );
+    const spurious = new Set((audit.spurious ?? []).map(compactLabel));
+    audited = found.filter((q) => !spurious.has(compactLabel(q.displayNumber)));
 
     for (const item of audit.missing ?? []) {
-      const key = item.displayNumber.trim().toLowerCase();
+      const key = compactLabel(item.displayNumber);
       if (seen.has(key)) continue;
       seen.add(key);
       let at = audited.length;
@@ -185,10 +196,8 @@ Return empty arrays if the list is already correct.`,
     }
 
     for (const group of audit.split ?? []) {
-      const key = group.displayNumber.trim().toLowerCase();
-      const at = audited.findIndex(
-        (q) => q.displayNumber.trim().toLowerCase() === key,
-      );
+      const key = compactLabel(group.displayNumber);
+      const at = audited.findIndex((q) => compactLabel(q.displayNumber) === key);
       if (at === -1 || (group.parts ?? []).length < 2) continue;
       audited.splice(at, 1, ...group.parts);
     }
@@ -196,7 +205,7 @@ Return empty arrays if the list is already correct.`,
     // The audit is an accuracy boost, not a hard requirement.
   }
 
-  return audited.flatMap(splitInlineSubParts).map((q, index) => {
+  return dedupe(audited.flatMap(splitInlineSubParts)).map((q, index) => {
     const { parentNumber, subLabel } = parseQuestionNumber(q.displayNumber);
     return {
       id: `q${index + 1}`,
