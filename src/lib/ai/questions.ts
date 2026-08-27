@@ -94,12 +94,28 @@ export function splitInlineSubParts(q: RawQuestion): RawQuestion[] {
   if (parts.some((p) => p.body.length < 15)) return [q];
 
   const { parentNumber } = parseQuestionNumber(q.displayNumber);
-  return parts.map((part) => ({
+  const share = shareMarks(q.marks, parts.length);
+  return parts.map((part, i) => ({
     displayNumber: `${parentNumber ?? q.displayNumber.trim()} (${part.letter})`,
     text: `${stem} ${part.body}`.trim(),
-    marks: q.marks ? q.marks / parts.length : null,
+    marks: share[i],
     page: q.page,
   }));
+}
+
+/**
+ * Divides a question's marks across its parts in halves, giving any remainder to
+ * the earlier parts. Plain division turned 1 mark over 3 parts into 0.333..,
+ * which reached both the marks pill and the grading prompt; halves are the
+ * granularity the rest of the app already marks in, and the shares still add up
+ * to what the paper printed.
+ */
+function shareMarks(marks: number | null | undefined, parts: number): number[] {
+  if (!marks || parts < 1) return Array.from({ length: parts }, () => null as never);
+  const halves = Math.round(marks * 2);
+  const base = Math.floor(halves / parts);
+  const extra = halves - base * parts;
+  return Array.from({ length: parts }, (_, i) => (base + (i < extra ? 1 : 0)) / 2);
 }
 
 /** One row per printed label. Two passes and two splitters feed this list, so

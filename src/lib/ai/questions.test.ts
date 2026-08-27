@@ -77,3 +77,36 @@ describe("splitInlineSubParts", () => {
     expect(splitInlineSubParts(thin)).toEqual([thin]);
   });
 });
+
+describe("marks across split parts", () => {
+  it("splits marks in halves that still add up", () => {
+    // Plain division made 2 marks over 3 parts 0.6666666666666666, which reached
+    // both the marks pill and the grading prompt.
+    const parts = splitInlineSubParts(
+      q(
+        "9",
+        "Answer all three about the eye: (a) Explain why the pupil narrows in bright light. (b) Explain how the ciliary muscles focus. (c) Explain why the retina needs rods.",
+        2,
+      ),
+    );
+
+    expect(parts).toHaveLength(3);
+    expect(parts.map((p) => p.marks)).toEqual([1, 0.5, 0.5]);
+    expect(parts.reduce((sum, p) => sum + (p.marks ?? 0), 0)).toBe(2);
+  });
+
+  it.each([
+    [2, 2, [1, 1]],
+    [3, 2, [1.5, 1.5]],
+    [5, 2, [2.5, 2.5]],
+  ])("splits %i marks over %i parts", (marks, count, expected) => {
+    const body = Array.from(
+      { length: count },
+      (_, i) => `(${"abc"[i]}) part ${i} with enough words to count`,
+    ).join(" ");
+    const parts = splitInlineSubParts(q("9", `Answer the following parts: ${body}`, marks));
+
+    expect(parts.map((p) => p.marks)).toEqual(expected);
+    expect(parts.reduce((sum, p) => sum + (p.marks ?? 0), 0)).toBe(marks);
+  });
+});
