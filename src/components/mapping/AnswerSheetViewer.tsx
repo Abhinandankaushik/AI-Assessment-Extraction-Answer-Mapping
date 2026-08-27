@@ -2,6 +2,7 @@
 
 import { ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { highlightBands } from "@/lib/highlight";
 import { useAppStore } from "@/lib/store";
 import type { AnswerRegion } from "@/lib/types";
 
@@ -55,7 +56,7 @@ export function AnswerSheetViewer() {
       const written = block.labelOnSheet && trimLabel(block.labelOnSheet);
       return {
         label: written ? `${written} · unmatched` : "Unmatched",
-        regions: block.regions,
+        regions: highlightBands(blocks, block.regions),
         tone: "unmatched" as const,
       };
     }
@@ -70,7 +71,7 @@ export function AnswerSheetViewer() {
     const printed = question && trimLabel(question.displayNumber);
     return {
       label: printed ? `Q${printed}` : "",
-      regions,
+      regions: highlightBands(blocks, regions),
       tone: "matched" as const,
     };
   }, [selectedBlockId, selectedQuestionId, results, questions, blocks]);
