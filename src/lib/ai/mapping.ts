@@ -43,6 +43,55 @@ const SCHEMA = {
   required: ["matches"],
 } as const;
 
+/**
+ * Turns the sections a student marked inside one answer into separate blocks —
+ * but only when the paper prints a sub-question for EVERY one of them.
+ *
+ * That condition is the whole point. A student answering 26 (a) and 26 (b)
+ * writes "(a)" and "(b)", and the paper has a row waiting for each, so the two
+ * halves should be highlighted and marked apart. A student listing four
+ * observations under one question writes "(i) (ii) (iii) (iv)" against a paper
+ * that prints no such parts — splitting that shatters one answer into four
+ * highlights of the same question, which is noise, not precision.
+ */
+export function materialiseParts(
+  questions: ExtractedQuestion[],
+  blocks: AnswerBlock[],
+): AnswerBlock[] {
+  const parents = new Set(
+    questions
+      .map((q) => (q.subLabel ? q.parentNumber : null))
+      .filter((n): n is string => Boolean(n)),
+  );
+
+  return blocks.flatMap<AnswerBlock>((block) => {
+    const parts = block.parts ?? [];
+    const plain = { ...block, parts: undefined };
+    if (parts.length < 2) return [plain];
+
+    const covered = [...parents].some((parent) =>
+      parts.every((part) =>
+        questions.some(
+          (q) => q.parentNumber === parent && q.subLabel === part.marker,
+        ),
+      ),
+    );
+    if (!covered) return [plain];
+
+    return parts.map((part, index) => ({
+      id: `${block.id}_${index + 1}`,
+      // Only the first part inherits the number the student wrote; the rest
+      // carry the marker they were written with.
+      labelOnSheet: index === 0 ? block.labelOnSheet : `(${part.marker})`,
+      transcription: part.transcription,
+      regions: part.regions,
+      continuesFromPrevPage: index === 0 && block.continuesFromPrevPage,
+      groupId: block.id,
+      partMarker: part.marker,
+    }));
+  });
+}
+
 /** Consecutive parts of one written answer, kept together for matching. */
 function groupUnits(blocks: AnswerBlock[]): AnswerBlock[][] {
   const units: AnswerBlock[][] = [];

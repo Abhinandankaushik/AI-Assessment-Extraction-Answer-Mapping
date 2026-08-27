@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { gradeAnswers } from "@/lib/ai/grading";
-import { mapAnswersToQuestions } from "@/lib/ai/mapping";
+import { mapAnswersToQuestions, materialiseParts } from "@/lib/ai/mapping";
 import type { AnswerBlock, ExtractedQuestion } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -24,16 +24,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const outcome = await mapAnswersToQuestions(questions, blocks ?? []);
-    const { results, summary } = await gradeAnswers(
-      questions,
-      blocks ?? [],
-      outcome,
-    );
+    // Splitting an answer into its sub-parts needs the question paper, so it
+    // happens here rather than during extraction. The caller gets the resulting
+    // blocks back because every id in "results" refers to them.
+    const parts = materialiseParts(questions, blocks ?? []);
+
+    const outcome = await mapAnswersToQuestions(questions, parts);
+    const { results, summary } = await gradeAnswers(questions, parts, outcome);
 
     return NextResponse.json({
       results,
       summary,
+      blocks: parts,
       orphanBlockIds: outcome.orphanBlockIds,
     });
   } catch (error) {

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { AnswerBlock, ExtractedQuestion } from "@/lib/types";
 import { parseQuestionNumber } from "./numbering";
-import { matchByLabel, snapGroups, type QuestionMatch } from "./mapping";
+import {
+  matchByLabel,
+  materialiseParts,
+  snapGroups,
+  type QuestionMatch,
+} from "./mapping";
 
 function question(displayNumber: string, index: number): ExtractedQuestion {
   const { parentNumber, subLabel } = parseQuestionNumber(displayNumber);
@@ -240,5 +245,74 @@ describe("snapGroups", () => {
     ];
 
     expect(snapGroups(questions, blocks, matches, ["g1_2"])).toEqual(["g1_2"]);
+  });
+});
+
+function withParts(
+  id: string,
+  labelOnSheet: string | null,
+  markers: string[],
+): AnswerBlock {
+  return {
+    id,
+    labelOnSheet,
+    transcription: markers.map((m) => `(${m}) something`).join(" "),
+    regions: [{ page: 1, box: { x: 0.1, y: 0.1, w: 0.7, h: 0.3 } }],
+    continuesFromPrevPage: false,
+    parts: markers.map((marker, i) => ({
+      marker,
+      transcription: `(${marker}) something`,
+      regions: [{ page: 1, box: { x: 0.1, y: 0.1 + i * 0.05, w: 0.7, h: 0.04 } }],
+    })),
+  };
+}
+
+describe("materialiseParts", () => {
+  it("splits an answer whose markers all have a printed sub-question", () => {
+    const questions = ["26 (a)", "26 (b)"].map(question);
+    const out = materialiseParts(questions, [
+      withParts("p10b3", "Q.26)", ["a", "b"]),
+    ]);
+
+    expect(out.map((b) => b.id)).toEqual(["p10b3_1", "p10b3_2"]);
+    expect(out.map((b) => b.partMarker)).toEqual(["a", "b"]);
+    expect(out.every((b) => b.groupId === "p10b3")).toBe(true);
+    // Each part keeps its own region, which is the point of splitting at all.
+    expect(out[0].regions[0].box.y).toBeCloseTo(0.1, 6);
+    expect(out[1].regions[0].box.y).toBeCloseTo(0.15, 6);
+  });
+
+  it("leaves a list of observations as one answer", () => {
+    // The student numbered four observations under Q25. The paper prints no
+    // 25 (i) or 25 (ii), so splitting would shatter one answer into four
+    // highlights of the same question.
+    const questions = ["25", "26 (a)", "26 (b)"].map(question);
+    const out = materialiseParts(questions, [
+      withParts("p9b1", "Q.25)", ["i", "ii", "iii", "iv"]),
+    ]);
+
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe("p9b1");
+    expect(out[0].parts).toBeUndefined();
+  });
+
+  it("leaves an answer whole when only some markers have a sub-question", () => {
+    // "24 (b)" is one printed question containing (i) and (ii): both halves
+    // belong to the same row, so they must highlight together.
+    const questions = ["24 (a)", "24 (b)"].map(question);
+    const out = materialiseParts(questions, [
+      withParts("p8b2", "Q.24)(b)", ["b", "ii"]),
+    ]);
+
+    expect(out).toHaveLength(1);
+    expect(out[0].regions[0].box.h).toBeCloseTo(0.3, 6);
+  });
+
+  it("passes a block with no marked sections straight through", () => {
+    const questions = ["1"].map(question);
+    const plain = block("b1", "Q.1)");
+    expect(materialiseParts(questions, [plain])).toEqual([
+      { ...plain, parts: undefined },
+    ]);
   });
 });

@@ -46,6 +46,13 @@ export interface AnswerRegion {
   box: BBox;
 }
 
+/** One "(a)"/"(b)" section of a written answer, with its own tight region. */
+export interface AnswerPart {
+  marker: string;
+  transcription: string;
+  regions: AnswerRegion[];
+}
+
 export interface AnswerBlock {
   id: string;
   /** The question number the student wrote next to the answer, if any. */
@@ -53,9 +60,13 @@ export interface AnswerBlock {
   transcription: string;
   regions: AnswerRegion[];
   continuesFromPrevPage: boolean;
-  /** Shared by the parts of one written answer that the student split into
-   *  "(a)" and "(b)", so mapping can match the group once and then hand each
-   *  part to its own sub-question. */
+  /** Sections the student marked inside this one answer. They only become
+   *  separate blocks when the paper prints a sub-question for each of them -
+   *  see materialiseParts. */
+  parts?: AnswerPart[];
+  /** Shared by the parts of one written answer that were split apart, so
+   *  mapping can match the group once and then hand each part to its own
+   *  sub-question. */
   groupId?: string;
   /** The sub-part this block opens with, when it is one part of a group. */
   partMarker?: string | null;

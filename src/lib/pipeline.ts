@@ -136,6 +136,7 @@ export async function runPipeline(
   const graded = await postJson<{
     results: QuestionResult[];
     summary: GradingSummary;
+    blocks?: AnswerBlock[];
     orphanBlockIds: string[];
   }>("/api/map-and-grade", { questions, blocks });
 
@@ -144,7 +145,9 @@ export async function runPipeline(
   return {
     answerPages,
     questions,
-    blocks,
+    // Mapping may have split an answer into its sub-parts, and the ids in
+    // "results" point at those.
+    blocks: graded.blocks ?? blocks,
     results: graded.results,
     summary: graded.summary,
     orphanBlockIds: graded.orphanBlockIds ?? [],

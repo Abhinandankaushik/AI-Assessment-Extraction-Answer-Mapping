@@ -1,5 +1,5 @@
 import { Type } from "@google/genai";
-import type { AnswerBlock, BBox } from "@/lib/types";
+import type { AnswerBlock, AnswerPart, BBox } from "@/lib/types";
 import { ThinkingLevel, generateJson, type ImagePart } from "./client";
 import { leadingSubPart } from "./numbering";
 
@@ -126,21 +126,23 @@ export function unionBoxes(boxes: RawBox[], padding = 0.008): BBox | null {
   };
 }
 
-export interface AnswerPart {
+export interface LineGroup {
   marker: string | null;
   lines: RawLine[];
 }
 
 /**
- * A student who answers "26 (a)" and "26 (b)" under one written number gives us
- * one block covering both. Splitting it at the markers is what lets each part
- * be highlighted — and marked — on its own.
+ * Finds the "(a)"/"(b)" sections a student marked inside one written answer.
  *
- * Only a block carrying two or more markers is split: a single leading "(a)" is
- * just how that one answer starts, not evidence of a group.
+ * This only *reports* the sections — whether they become separate blocks is
+ * decided later, against the question paper, because "(i) (ii) (iii)" inside a
+ * single answer is a list rather than a set of sub-parts.
+ *
+ * A block carrying fewer than two markers has no sections: a single leading
+ * "(a)" is just how that one answer starts.
  */
-export function splitIntoParts(lines: RawLine[]): AnswerPart[] {
-  const parts: AnswerPart[] = [];
+export function splitIntoParts(lines: RawLine[]): LineGroup[] {
+  const parts: LineGroup[] = [];
 
   for (const line of lines) {
     const marker = leadingSubPart(line.text);
@@ -184,36 +186,39 @@ export async function extractAnswersFromPages(
   const allowed = new Set(pageNumbers);
 
   return (result.blocks ?? [])
-    .flatMap((block, index) => {
+    .map((block, index) => {
       const lines = block.lines ?? [];
       const page = allowed.has(block.page) ? block.page : pageNumbers[0];
-      const label = block.labelOnSheet?.trim();
-      const groupId = `p${page}b${index + 1}`;
-      const parts = splitIntoParts(lines);
+      const box = unionBoxes(lines.map((l) => l.box));
+      const transcription = joinLines(lines);
+      if (!box || !transcription) return null;
 
-      return parts
-        .map((part, partIndex) => {
-          const box = unionBoxes(part.lines.map((l) => l.box));
-          const transcription = joinLines(part.lines);
-          if (!box || !transcription) return null;
-          return {
-            // Only the first part inherits the number the student wrote; the
-            // rest carry the marker they were written with.
-            id: parts.length > 1 ? `${groupId}_${partIndex + 1}` : groupId,
-            labelOnSheet:
-              (partIndex === 0 && label) ||
-              (part.marker ? `(${part.marker})` : null),
-            transcription,
-            regions: [{ page, box }],
-            continuesFromPrevPage:
-              partIndex === 0 && Boolean(block.continuesFromPrevPage),
-            ...(parts.length > 1
-              ? { groupId, partMarker: part.marker }
-              : {}),
-          } satisfies AnswerBlock;
+      const groups = splitIntoParts(lines);
+      const parts = groups
+        .map((group) => {
+          const partBox = unionBoxes(group.lines.map((l) => l.box));
+          const text = joinLines(group.lines);
+          return group.marker && partBox && text
+            ? {
+                marker: group.marker,
+                transcription: text,
+                regions: [{ page, box: partBox }],
+              }
+            : null;
         })
-        .filter((b): b is AnswerBlock => b !== null);
+        .filter((p): p is AnswerPart => p !== null);
+
+      const label = block.labelOnSheet?.trim();
+      return {
+        id: `p${page}b${index + 1}`,
+        labelOnSheet: label ? label : null,
+        transcription,
+        regions: [{ page, box }],
+        continuesFromPrevPage: Boolean(block.continuesFromPrevPage),
+        ...(parts.length > 1 ? { parts } : {}),
+      } satisfies AnswerBlock;
     })
+    .filter((b): b is AnswerBlock => b !== null)
     .sort(
       (a, b) =>
         a.regions[0].page - b.regions[0].page ||
