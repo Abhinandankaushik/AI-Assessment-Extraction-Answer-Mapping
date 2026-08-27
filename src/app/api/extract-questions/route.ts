@@ -3,8 +3,9 @@ import { extractQuestions } from "@/lib/ai/questions";
 import type { ImagePart } from "@/lib/ai/client";
 
 export const runtime = "nodejs";
-// Measured on the 10-page sample: question extraction ~30s, each answer
-// batch ~10-17s, mapping plus grading ~100s. 60s was not enough.
+// Measured on the 10-page sample, individual calls run 10-30s. Requests are
+// issued concurrently where they are independent, so a route can hold several
+// at once and 60s was not enough.
 export const maxDuration = 300;
 
 export async function POST(request: Request) {

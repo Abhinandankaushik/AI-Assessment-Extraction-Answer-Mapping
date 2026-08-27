@@ -13,12 +13,12 @@ import type {
 
 const PAGES_PER_REQUEST = 4;
 
-/** Each stage owns a slice of the bar so progress never jumps backwards. */
+/** Each stage owns a slice of the bar so progress never jumps backwards.
+ *  Questions and answers share one slice because they are read concurrently. */
 const SPAN = {
-  reading: [0, 0.22],
-  questions: [0.22, 0.45],
-  answers: [0.45, 0.85],
-  mapping: [0.85, 1],
+  reading: [0, 0.18],
+  extracting: [0.18, 0.75],
+  mapping: [0.75, 1],
 } as const;
 
 const lerp = (span: readonly [number, number], t: number) =>
@@ -75,8 +75,8 @@ export async function runPipeline(
 
   onProgress({
     stage: "questions",
-    label: "Extracting questions from the paper",
-    value: SPAN.questions[0],
+    label: "Reading the paper and the answer sheet",
+    value: SPAN.extracting[0],
   });
 
   // A single PDF goes to the model untouched — faster, and its vector text
@@ -90,42 +90,47 @@ export async function runPipeline(
     ? [{ mimeType: "application/pdf", data: await fileToBase64(singlePdf) }]
     : (await rasterizeAll(questionFiles.map((f) => f.file))).map(asPart);
 
-  const { questions } = await postJson<{ questions: ExtractedQuestion[] }>(
-    "/api/extract-questions",
-    { pages: questionParts },
-  );
-
-  onProgress({
-    stage: "answers",
-    label: `Reading ${questions.length} questions · now reading the answers`,
-    value: SPAN.answers[0],
-  });
-
-  const blocks: AnswerBlock[] = [];
   const batches: PageImage[][] = [];
   for (let i = 0; i < answerPages.length; i += PAGES_PER_REQUEST) {
     batches.push(answerPages.slice(i, i + PAGES_PER_REQUEST));
   }
 
-  for (const [index, batch] of batches.entries()) {
-    const first = batch[0].index + 1;
-    const last = batch[batch.length - 1].index + 1;
-    onProgress({
-      stage: "answers",
-      label: `Reading answers — page ${first}${last > first ? `–${last}` : ""} of ${answerPages.length}`,
-      value: lerp(SPAN.answers, index / batches.length),
-    });
+  // The paper and the sheet have nothing to say to each other until mapping, so
+  // every read runs at once. Same number of requests, a fraction of the wait.
+  const units = batches.length + 1;
+  let done = 0;
+  const step = (label: string, stage: Progress["stage"]) => {
+    done += 1;
+    onProgress({ stage, label, value: lerp(SPAN.extracting, done / units) });
+  };
 
-    const { blocks: found } = await postJson<{ blocks: AnswerBlock[] }>(
-      "/api/extract-answers",
-      {
-        pages: batch.map(asPart),
-        pageNumbers: batch.map((p) => p.index + 1),
-        totalPages: answerPages.length,
-      },
-    );
-    blocks.push(...found);
-  }
+  const [{ questions }, batchResults] = await Promise.all([
+    postJson<{ questions: ExtractedQuestion[] }>("/api/extract-questions", {
+      pages: questionParts,
+    }).then((result) => {
+      step(`Found ${result.questions.length} questions`, "questions");
+      return result;
+    }),
+
+    Promise.all(
+      batches.map((batch) => {
+        const first = batch[0].index + 1;
+        const last = batch[batch.length - 1].index + 1;
+        return postJson<{ blocks: AnswerBlock[] }>("/api/extract-answers", {
+          pages: batch.map(asPart),
+          pageNumbers: batch.map((p) => p.index + 1),
+          totalPages: answerPages.length,
+        }).then((result) => {
+          const pages = last > first ? `${first}–${last}` : `${first}`;
+          step(`Read answers on page ${pages}`, "answers");
+          return result;
+        });
+      }),
+    ),
+  ]);
+
+  // Batch order is preserved, so blocks stay in page order.
+  const blocks = batchResults.flatMap((result) => result.blocks);
 
   onProgress({
     stage: "mapping",

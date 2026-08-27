@@ -131,9 +131,11 @@ vercel --prod
 ```
 
 The key is only read at request time, so the build itself needs no secrets.
-The AI routes declare `maxDuration = 300`. Measured on the 10-page sample:
-question extraction ~30s, each batch of four answer pages 10-17s, and mapping
-plus grading ~100s — about three minutes end to end.
+The AI routes declare `maxDuration = 300`. Nothing waits on anything it does
+not need: the paper and the answer sheet are read concurrently, the answer pages
+go out as parallel batches of four, and a long paper is marked in parallel
+chunks. Per-request timings on the 10-page sample are 10-30s, and the request
+count is unchanged by any of it.
 
 ## Sample files
 
@@ -152,9 +154,10 @@ answers run across page breaks.
 ## Assumptions and limitations
 
 - **Free-tier quota is the real constraint.** Gemini's free tier allows roughly
-  **20 requests per day per model**. A full run costs about five requests, so the
-  app batches answer pages into one request each and falls back across four
-  models when one is exhausted. When all four are spent the UI says so plainly
+  **20 requests per day per model**. A full run of the 10-page sample costs
+  seven or eight, so the app batches four answer pages into each request and
+  falls back across four models when one is exhausted. Running requests
+  concurrently is what makes it quick; it does not make it cost more. When all four are spent the UI says so plainly
   instead of rendering an empty result.
 - **Marking is indicative.** The model marks against the printed question, not an
   official marking scheme, so awarded marks are a teacher's starting point rather
