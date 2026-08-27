@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AnswerBlock, ExtractedQuestion } from "@/lib/types";
 import { parseQuestionNumber } from "./numbering";
 import {
+  absorbTrailingFragments,
   matchByLabel,
   materialiseParts,
   snapGroups,
@@ -332,5 +333,61 @@ describe("materialiseParts", () => {
     expect(materialiseParts(questions, [plain])).toEqual([
       { ...plain, parts: undefined },
     ]);
+  });
+});
+
+describe("absorbTrailingFragments", () => {
+  it("gives a trailing fragment back to the answer it runs on from", () => {
+    // Q24 (b) was matched by content, so matchByLabel never held it open and
+    // the "(ii)" half below it had nothing to attach to.
+    const blocks = [
+      block("b1", null, { y: 0.1, h: 0.25 }),
+      block("b2", "(ii)", { y: 0.36, h: 0.2 }),
+    ];
+    const matches: QuestionMatch[] = [
+      { questionId: "q1", blockIds: ["b1"], basis: "semantic", confidence: 0.8 },
+    ];
+
+    expect(absorbTrailingFragments(blocks, matches, ["b2"])).toEqual([]);
+    expect(matches[0].blockIds).toEqual(["b1", "b2"]);
+  });
+
+  it("chains a run of fragments onto the same answer", () => {
+    const blocks = [
+      block("b1", "Q.9)", { y: 0.1, h: 0.1 }),
+      block("b2", null, { y: 0.21, h: 0.1 }),
+      block("b3", null, { y: 0.32, h: 0.1 }),
+    ];
+    const matches: QuestionMatch[] = [
+      { questionId: "q1", blockIds: ["b1"], basis: "label", confidence: 1 },
+    ];
+
+    expect(absorbTrailingFragments(blocks, matches, ["b2", "b3"])).toEqual([]);
+    expect(matches[0].blockIds).toEqual(["b1", "b2", "b3"]);
+  });
+
+  it("leaves a fragment carrying a question number of its own", () => {
+    const blocks = [
+      block("b1", "Q.9)", { y: 0.1, h: 0.1 }),
+      block("b2", "Q.40)", { y: 0.21, h: 0.1 }), // no such question on the paper
+    ];
+    const matches: QuestionMatch[] = [
+      { questionId: "q1", blockIds: ["b1"], basis: "label", confidence: 1 },
+    ];
+
+    expect(absorbTrailingFragments(blocks, matches, ["b2"])).toEqual(["b2"]);
+    expect(matches[0].blockIds).toEqual(["b1"]);
+  });
+
+  it("leaves a fragment that starts after a gap", () => {
+    const blocks = [
+      block("b1", "Q.9)", { y: 0.1, h: 0.1 }),
+      block("b2", null, { y: 0.6, h: 0.1 }),
+    ];
+    const matches: QuestionMatch[] = [
+      { questionId: "q1", blockIds: ["b1"], basis: "label", confidence: 1 },
+    ];
+
+    expect(absorbTrailingFragments(blocks, matches, ["b2"])).toEqual(["b2"]);
   });
 });

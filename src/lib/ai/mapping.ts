@@ -389,7 +389,11 @@ Rules:
     orphanBlockIds.push(...leftovers.map((b) => b.id));
   }
 
-  const orphans = snapGroups(questions, blocks, matches, orphanBlockIds);
+  const orphans = absorbTrailingFragments(
+    blocks,
+    matches,
+    snapGroups(questions, blocks, matches, orphanBlockIds),
+  );
 
   const answered = new Set(matches.map((m) => m.questionId));
   return {
@@ -399,6 +403,51 @@ Rules:
       .map((q) => q.id),
     orphanBlockIds: orphans,
   };
+}
+
+/**
+ * Gives an orphan back to the answer it runs on from.
+ *
+ * `matchByLabel` already does this while it walks the sheet, but it can only
+ * act on answers it matched itself. When a question is matched by the semantic
+ * pass instead, the fragments below it — the "(ii)" half of an answer whose
+ * "(i)" half carried the number — have nowhere to attach and end up unmatched,
+ * so the answer is highlighted and marked half-finished.
+ *
+ * Mutates `matches`; returns the orphan ids that survive.
+ */
+export function absorbTrailingFragments(
+  blocks: AnswerBlock[],
+  matches: QuestionMatch[],
+  orphanBlockIds: string[],
+): string[] {
+  const orphans = new Set(orphanBlockIds);
+  if (orphans.size === 0) return orphanBlockIds;
+
+  const owners = new Map<string, QuestionMatch>();
+  for (const match of matches) {
+    for (const blockId of match.blockIds) owners.set(blockId, match);
+  }
+
+  // Reading order, so each fragment is weighed against what sits directly
+  // above it. Absorbing as we go lets a run of them chain onto one answer.
+  for (let i = 1; i < blocks.length; i++) {
+    const block = blocks[i];
+    if (!orphans.has(block.id)) continue;
+    // A written number points somewhere specific; only a bare marker or no
+    // label at all can belong to whatever came before.
+    if (block.labelOnSheet && !bareSubPart(block.labelOnSheet)) continue;
+
+    const above = blocks[i - 1];
+    const owner = owners.get(above.id);
+    if (!owner || !followsOn(above, block)) continue;
+
+    owner.blockIds.push(block.id);
+    owners.set(block.id, owner);
+    orphans.delete(block.id);
+  }
+
+  return [...orphans];
 }
 
 /**
