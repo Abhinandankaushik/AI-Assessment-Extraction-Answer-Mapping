@@ -224,7 +224,7 @@ export function AnswerSheetViewer() {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="min-h-0 flex-1 overflow-auto bg-surface-2 p-4"
+        className="min-h-0 flex-1 overflow-auto bg-surface-2 p-2"
       >
         <div className="mx-auto" style={{ width: `${zoom * 100}%`, maxWidth: zoom <= 1 ? "100%" : "none" }}>
           {answerPages.map((page, index) => (
@@ -233,7 +233,7 @@ export function AnswerSheetViewer() {
               ref={(el) => {
                 pageRefs.current[index] = el;
               }}
-              className="relative mb-4 overflow-hidden rounded-lg bg-white shadow-sm last:mb-0"
+              className="relative mb-2 overflow-hidden rounded-lg bg-white shadow-sm last:mb-0"
             >
               {/* Sizing the image from the dimensions the rasteriser already
                   recorded reserves its height before the data URL decodes.

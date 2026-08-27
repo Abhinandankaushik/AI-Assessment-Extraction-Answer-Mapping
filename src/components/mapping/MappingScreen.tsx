@@ -48,7 +48,7 @@ export function MappingScreen() {
 
       <div className="flex min-h-0 flex-1 gap-3">
         <div
-          className={`min-h-0 w-full md:block md:w-[640px] md:shrink-0 ${
+          className={`min-h-0 w-full md:block md:w-[42%] md:max-w-[640px] md:min-w-[380px] md:shrink-0 xl:max-w-[720px] ${
             tab === "questions" ? "block" : "hidden"
           }`}
         >
