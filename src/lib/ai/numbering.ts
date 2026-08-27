@@ -29,6 +29,18 @@ export function bareSubPart(label: string): string | null {
   return match ? match[1].toLowerCase() : null;
 }
 
+/**
+ * The sub-part marker a line *opens* with — "(b) NaCl + AgNO3 …" is part (b).
+ * Unlike {@link bareSubPart} the marker must be followed by real content, which
+ * is what separates a new part from a line that merely starts with a stray letter.
+ */
+export function leadingSubPart(text: string): string | null {
+  const match = text
+    .trim()
+    .match(/^\(?\s*([a-h]|i{1,3}|iv|vi{0,3}|ix|x)\s*\)\s*(?=\S)/i);
+  return match ? match[1].toLowerCase() : null;
+}
+
 /** Normalised key used to match a label written on an answer sheet ("Q11(a).")
  *  against a question number printed on the paper ("11 (a)"). */
 export function numberKey(display: string): string {

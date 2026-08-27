@@ -53,6 +53,12 @@ export interface AnswerBlock {
   transcription: string;
   regions: AnswerRegion[];
   continuesFromPrevPage: boolean;
+  /** Shared by the parts of one written answer that the student split into
+   *  "(a)" and "(b)", so mapping can match the group once and then hand each
+   *  part to its own sub-question. */
+  groupId?: string;
+  /** The sub-part this block opens with, when it is one part of a group. */
+  partMarker?: string | null;
 }
 
 export type MatchBasis = "label" | "semantic" | "none";
