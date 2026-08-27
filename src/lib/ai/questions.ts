@@ -12,8 +12,9 @@ Extract EVERY question from these question-paper page images, in the exact order
 
 Hard rules:
 1. Preserve the printed numbering VERBATIM in "displayNumber". If the paper prints "11 (a)", output "11 (a)" - not "11a", not "11".
-2. Treat every labelled sub-part as a SEPARATE entry. "11 (a)" and "11 (b)" are two questions, never one combined entry.
-3. If a question has an unlabelled lead-in paragraph followed by labelled parts, attach the lead-in context to the FIRST labelled part and keep the parts separate.
+2. Treat every labelled sub-part as a SEPARATE entry. "11 (a)" and "11 (b)" are two questions, never one combined entry. This holds even when the parts run on in the SAME paragraph or line as the question - "26. Write balanced equations for: (a) ... (b) ..." is TWO entries, "26 (a)" and "26 (b)", never one.
+3. If a question has an unlabelled lead-in paragraph followed by labelled parts, repeat the lead-in at the start of EVERY part so each entry reads on its own, then keep the parts separate. Split the printed marks evenly across the parts.
+3b. The lettered options of a multiple-choice question are NOT sub-parts. "(A) 4 (B) 6 (C) 8 (D) 10" is one question with its options, so keep it as ONE entry.
 4. Copy question text verbatim. Do not shorten, clean up, or fix typos.
 5. Never invent a question. Never skip one - including questions that continue across a page break.
 6. Skip page headers, footers, school names, instructions, section headings and marks tables. Those are not questions.
@@ -43,8 +44,19 @@ const AUDIT_SCHEMA = {
   properties: {
     missing: { type: Type.ARRAY, items: QUESTION_ITEM },
     spurious: { type: Type.ARRAY, items: { type: Type.STRING } },
+    split: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          displayNumber: { type: Type.STRING },
+          parts: { type: Type.ARRAY, items: QUESTION_ITEM },
+        },
+        required: ["displayNumber", "parts"],
+      },
+    },
   },
-  required: ["missing", "spurious"],
+  required: ["missing", "spurious", "split"],
 } as const;
 
 interface RawQuestion {
@@ -52,6 +64,42 @@ interface RawQuestion {
   text: string;
   marks?: number | null;
   page: number;
+}
+
+/**
+ * Last-resort split for a question that still bundles its sub-parts, e.g.
+ * "Write balanced equations for: (a) ... (b) ...". The guards exist because a
+ * multiple-choice option list looks identical to a regex: they keep it to
+ * lowercase markers running a, b, c in order, on a question worth more than the
+ * single mark an objective question carries, with a stem and real text in each
+ * part. Anything less certain is left alone for the model's own judgement.
+ */
+export function splitInlineSubParts(q: RawQuestion): RawQuestion[] {
+  const { subLabel } = parseQuestionNumber(q.displayNumber);
+  if (subLabel) return [q];
+  if (!q.marks || q.marks < 2) return [q];
+
+  const markers = [...q.text.matchAll(/(?:^|[\s;:.])\(([a-h])\)\s(?=\S)/g)];
+  if (markers.length < 2 || markers.length > 3) return [q];
+  if (markers.some((m, i) => m[1] !== String.fromCharCode(97 + i))) return [q];
+
+  const stem = q.text.slice(0, markers[0].index).trim();
+  if (stem.length < 10) return [q];
+
+  const parts = markers.map((marker, i) => {
+    const from = marker.index + marker[0].length;
+    const to = markers[i + 1]?.index ?? q.text.length;
+    return { letter: marker[1], body: q.text.slice(from, to).trim() };
+  });
+  if (parts.some((p) => p.body.length < 15)) return [q];
+
+  const { parentNumber } = parseQuestionNumber(q.displayNumber);
+  return parts.map((part) => ({
+    displayNumber: `${parentNumber ?? q.displayNumber.trim()} (${part.letter})`,
+    text: `${stem} ${part.body}`.trim(),
+    marks: q.marks ? q.marks / parts.length : null,
+    page: q.page,
+  }));
 }
 
 /** Sort key that mirrors how a paper is actually laid out. */
@@ -97,6 +145,7 @@ export async function extractQuestions(
     const audit = await generateJson<{
       missing: RawQuestion[];
       spurious: string[];
+      split: { displayNumber: string; parts: RawQuestion[] }[];
     }>({
       system: SYSTEM,
       prompt: `${RULES}
@@ -107,6 +156,7 @@ ${JSON.stringify(found.map((q) => q.displayNumber))}
 Re-read the pages carefully and report:
 - "missing": every question printed on the pages that is absent from that list (full entries). Pay special attention to labelled sub-parts, questions at page boundaries and questions in later sections.
 - "spurious": any displayNumber in that list that is NOT actually printed on the pages.
+- "split": any entry in that list that bundles two or more printed sub-parts into one question, together with the separate entries it should become. Judge this by what the paper prints: "(a)" and "(b)" that ask for different work are sub-parts and must be split; the lettered options of a multiple-choice question are alternatives to one question and must NOT be split.
 Return empty arrays if the list is already correct.`,
       images,
       schema: AUDIT_SCHEMA,
@@ -133,11 +183,20 @@ Return empty arrays if the list is already correct.`,
       }
       audited.splice(at, 0, item);
     }
+
+    for (const group of audit.split ?? []) {
+      const key = group.displayNumber.trim().toLowerCase();
+      const at = audited.findIndex(
+        (q) => q.displayNumber.trim().toLowerCase() === key,
+      );
+      if (at === -1 || (group.parts ?? []).length < 2) continue;
+      audited.splice(at, 1, ...group.parts);
+    }
   } catch {
     // The audit is an accuracy boost, not a hard requirement.
   }
 
-  return audited.map((q, index) => {
+  return audited.flatMap(splitInlineSubParts).map((q, index) => {
     const { parentNumber, subLabel } = parseQuestionNumber(q.displayNumber);
     return {
       id: `q${index + 1}`,
