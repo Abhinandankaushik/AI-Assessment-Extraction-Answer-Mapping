@@ -106,3 +106,30 @@ describe("nested sub-parts", () => {
     expect(numberKey("7")).toBe("7");
   });
 });
+
+describe("labels the way papers and students actually write them", () => {
+  it("reads a paper that heads its rows with Q.", () => {
+    // Left unstripped, every question on such a paper had a null parentNumber,
+    // which took the whole paper out of the sub-part logic.
+    expect(parseQuestionNumber("Q.26 (a)")).toEqual({
+      parentNumber: "26",
+      subLabel: "a",
+    });
+    expect(numberKey("Q.26 (a)")).toBe("26a");
+  });
+
+  it("reads a number the student wrapped in brackets", () => {
+    expect(parseQuestionNumber("(22) (a)")).toEqual({
+      parentNumber: "22",
+      subLabel: "a",
+    });
+    expect(numberKey("(22) (a)")).toBe(numberKey("22 (a)"));
+  });
+
+  it("still refuses a label with no number in it", () => {
+    expect(parseQuestionNumber("(b)")).toEqual({
+      parentNumber: null,
+      subLabel: null,
+    });
+  });
+});

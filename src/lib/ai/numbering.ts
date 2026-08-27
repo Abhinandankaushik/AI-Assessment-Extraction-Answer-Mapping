@@ -1,11 +1,22 @@
-/** Splits a printed label such as "11 (a)" into its parent and sub-part. */
+const PREFIX = /^\s*(?:q(?:uestion)?|ans(?:wer)?)\s*[.:-]?\s*/i;
+
+/**
+ * Splits a printed label such as "11 (a)" into its parent and sub-part.
+ *
+ * Both an "Ans."-style prefix and a bracketed number are tolerated, because
+ * this reads printed papers and handwritten sheets alike: a paper that headed
+ * its rows "Q.26 (a)" used to come out with no parent number at all, which took
+ * every question in it out of the sub-part logic, and a student who wrote
+ * "(22) (a)" produced a key that matched nothing.
+ */
 export function parseQuestionNumber(display: string): {
   parentNumber: string | null;
   subLabel: string | null;
 } {
   const match = display
+    .replace(PREFIX, "")
     .trim()
-    .match(/^(\d+)\s*[.)]?\s*(?:\(\s*([a-z]{1,3})\s*\)|([a-z])\s*[.)])?/i);
+    .match(/^\(?\s*(\d+)\s*[.)]?\s*(?:\(\s*([a-z]{1,3})\s*\)|([a-z])\s*[.)])?/i);
 
   if (!match) return { parentNumber: null, subLabel: null };
   const sub = match[2] ?? match[3] ?? null;
@@ -38,10 +49,11 @@ export function compactLabel(display: string): string {
   return display.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-const PREFIX = /^\s*(?:q(?:uestion)?|ans(?:wer)?)\s*[.:-]?\s*/i;
-
 const SUB = String.raw`(?:\(\s*([a-z]{1,4})\s*\)|([a-z])\s*[.)])`;
-const TWO_LEVEL = new RegExp(String.raw`^(\d+)\s*[.)]?\s*${SUB}\s*${SUB}`, "i");
+const TWO_LEVEL = new RegExp(
+  String.raw`^\(?\s*(\d+)\s*[.)]?\s*${SUB}\s*${SUB}`,
+  "i",
+);
 
 /**
  * Normalised key matching a label written on an answer sheet ("Q11(a).")
