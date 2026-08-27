@@ -2,15 +2,63 @@
 
 import { useMemo, useState } from "react";
 import { useAppStore } from "@/lib/store";
+import type { GradingSummary } from "@/lib/types";
 import { QuestionRow } from "./QuestionRow";
 
-function SummaryCard() {
-  const summary = useAppStore((s) => s.summary);
-  if (!summary) return null;
+/** The brief asks a teacher to *quickly* see what was left unanswered, so the
+ *  summary counts double as filters rather than being read-only stats. */
+type Filter = "all" | "answered" | "unanswered" | "unmatched";
 
+function Chip({
+  active,
+  onClick,
+  tone,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  tone: "success" | "danger" | "warning";
+  children: React.ReactNode;
+}) {
+  const tones = {
+    success: "bg-success-tint/10 text-success",
+    danger: "bg-danger-tint text-danger",
+    warning: "bg-warning-tint/10 text-warning",
+  } as const;
+  const rings = {
+    success: "ring-success",
+    danger: "ring-danger",
+    warning: "ring-warning",
+  } as const;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`t-p5 rounded-pill px-3 py-1 transition-all ${tones[tone]} ${
+        active ? `ring-2 ring-offset-1 ${rings[tone]}` : "hover:brightness-95"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SummaryCard({
+  summary,
+  filter,
+  onFilter,
+}: {
+  summary: GradingSummary;
+  filter: Filter;
+  onFilter: (next: Filter) => void;
+}) {
   const percent = summary.total
     ? Math.round((summary.awarded / summary.total) * 100)
     : 0;
+
+  const toggle = (value: Filter) => onFilter(filter === value ? "all" : value);
 
   return (
     <div className="rounded-card bg-surface p-4">
@@ -23,16 +71,28 @@ function SummaryCard() {
           <p className="t-p5 mt-1 text-muted">{percent}% overall</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <span className="t-p5 rounded-pill bg-success-tint/10 px-3 py-1 text-success">
+          <Chip
+            tone="success"
+            active={filter === "answered"}
+            onClick={() => toggle("answered")}
+          >
             {summary.answered} answered
-          </span>
-          <span className="t-p5 rounded-pill bg-danger-tint px-3 py-1 text-danger">
+          </Chip>
+          <Chip
+            tone="danger"
+            active={filter === "unanswered"}
+            onClick={() => toggle("unanswered")}
+          >
             {summary.unanswered} unanswered
-          </span>
+          </Chip>
           {summary.unmatched > 0 && (
-            <span className="t-p5 rounded-pill bg-warning-tint/10 px-3 py-1 text-warning">
+            <Chip
+              tone="warning"
+              active={filter === "unmatched"}
+              onClick={() => toggle("unmatched")}
+            >
               {summary.unmatched} unmatched
-            </span>
+            </Chip>
           )}
         </div>
       </div>
@@ -78,14 +138,26 @@ function UnmatchedAnswers() {
 }
 
 export function QuestionList() {
-  const { questions, results, selectedQuestionId, selectQuestion } =
+  const { questions, results, summary, selectedQuestionId, selectQuestion } =
     useAppStore();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [filter, setFilter] = useState<Filter>("all");
 
   const resultById = useMemo(
     () => new Map(results.map((r) => [r.questionId, r])),
     [results],
   );
+
+  const visible = useMemo(() => {
+    if (filter === "unmatched") return [];
+    if (filter === "all") return questions;
+    const wantUnanswered = filter === "unanswered";
+    return questions.filter(
+      (q) =>
+        (resultById.get(q.id)?.verdict === "unanswered") === wantUnanswered,
+    );
+  }, [questions, resultById, filter]);
+
   const allExpanded = expanded.size === questions.length && questions.length > 0;
 
   return (
@@ -109,9 +181,32 @@ export function QuestionList() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pr-1 pb-4">
-        <SummaryCard />
+        {summary && (
+          <SummaryCard
+            summary={summary}
+            filter={filter}
+            onFilter={setFilter}
+          />
+        )}
+
+        {filter !== "all" && (
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-card bg-surface-2 px-4 py-2">
+            <p className="t-p5 text-ink">
+              Showing {filter === "unmatched" ? "unmatched answers" : filter}{" "}
+              only
+            </p>
+            <button
+              type="button"
+              onClick={() => setFilter("all")}
+              className="t-p5 text-brand hover:underline"
+            >
+              Show all
+            </button>
+          </div>
+        )}
+
         <div className="mt-3 flex flex-col gap-2">
-          {questions.map((question) => (
+          {visible.map((question) => (
             <QuestionRow
               key={question.id}
               question={question}
@@ -130,7 +225,8 @@ export function QuestionList() {
             />
           ))}
         </div>
-        <UnmatchedAnswers />
+
+        {filter !== "answered" && <UnmatchedAnswers />}
       </div>
     </div>
   );
