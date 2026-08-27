@@ -12,6 +12,15 @@ const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2];
  * is the app shell rather than this scroller — using it sent the view past the
  * answer. Measuring through rects is correct no matter what is positioned.
  */
+/** Drops the punctuation a label trails — "25." and "26)" become "25" and "26"
+ *  — while leaving a bracketed sub-part like "22 (a)" intact. */
+function trimLabel(label: string): string {
+  return label
+    .trim()
+    .replace(/[\s.]+$/, "")
+    .replace(/^([^()]*)\)$/, "$1");
+}
+
 function topWithinScroller(container: HTMLElement, el: HTMLElement): number {
   return (
     el.getBoundingClientRect().top -
@@ -43,7 +52,7 @@ export function AnswerSheetViewer() {
     if (selectedBlockId) {
       const block = blocks.find((b) => b.id === selectedBlockId);
       if (!block) return null;
-      const written = block.labelOnSheet?.trim().replace(/[.)\s]+$/, "");
+      const written = block.labelOnSheet && trimLabel(block.labelOnSheet);
       return {
         label: written ? `${written} · unmatched` : "Unmatched",
         regions: block.regions,
@@ -58,7 +67,7 @@ export function AnswerSheetViewer() {
       (id) => blocks.find((b) => b.id === id)?.regions ?? [],
     );
     // Papers print "25." or "22 (a)"; the tag reads better as Q25 / Q22 (a).
-    const printed = question?.displayNumber?.trim().replace(/[.)\s]+$/, "");
+    const printed = question && trimLabel(question.displayNumber);
     return {
       label: printed ? `Q${printed}` : "",
       regions,

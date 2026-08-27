@@ -26,6 +26,8 @@ const QUESTIONS: ExtractedQuestion[] = [
   ["q22a", "22 (a)", "Lamp A is rated 50 W, 220 V and Lamp B is rated 25 W, 220 V. Calculate the ratio of their resistances RA : RB.", 2],
   ["q22b", "22 (b)", "If Lamp A and Lamp B are now connected in series across a 220 V supply, which lamp will glow brighter? Give a reason.", 2],
   ["q24a", "24 (a)", "State any two structural differences between arteries and veins.", 2],
+  ["q26a", "26 (a)", "Write balanced chemical equations for the following reactions: Nitric acid reacts with calcium hydroxide.", 1],
+  ["q26b", "26 (b)", "Write balanced chemical equations for the following reactions: Sodium chloride solution reacts with silver nitrate solution.", 1],
 ].map(([id, displayNumber, text, marks], index) => ({
   id: id as string,
   displayNumber: displayNumber as string,
@@ -52,7 +54,11 @@ const BLOCKS: AnswerBlock[] = [
   { id: "b5", labelOnSheet: "Q.21)", transcription: "Given u = -10 cm, f = -15 cm. Mirror formula 1/v + 1/u = 1/f", regions: [box(3, 0.78, 0.14, 0.78)], continuesFromPrevPage: false },
   { id: "b6", labelOnSheet: null, transcription: "=> 1/v = -1/15 + 1/10 => v = +30 cm", regions: [box(4, 0.08, 0.16, 0.6)], continuesFromPrevPage: true },
   { id: "b7", labelOnSheet: "Q.22)(a)", transcription: "Lamp A -> Power = 50 W, Volt = 220 V. P = V^2/R, RA = 968 ohm", regions: [box(4, 0.32, 0.1, 0.66)], continuesFromPrevPage: false },
-  { id: "b8", labelOnSheet: "Q.15)", transcription: "Newton's third law states that every action has an equal and opposite reaction.", regions: [box(2, 0.62, 0.07, 0.7)], continuesFromPrevPage: false },
+  { id: "b8", labelOnSheet: "Q.15)", transcription: "(A) scattering of light", regions: [box(2, 0.655, 0.042, 0.42)], continuesFromPrevPage: false },
+  // One written answer the student split at "(a)" and "(b)": two blocks sharing
+  // a group, so each part highlights on its own.
+  { id: "p10b3_1", groupId: "p10b3", partMarker: "a", labelOnSheet: "(a)", transcription: "(a) 2HNO3 + Ca(OH)2 -> Ca(NO3)2 + 2H2O", regions: [box(10, 0.262, 0.036, 0.62)], continuesFromPrevPage: false },
+  { id: "p10b3_2", groupId: "p10b3", partMarker: "b", labelOnSheet: "(b)", transcription: "(b) NaCl + AgNO3 -> AgCl + NaNO3", regions: [box(10, 0.301, 0.036, 0.62)], continuesFromPrevPage: false },
 ];
 
 const RESULTS: QuestionResult[] = [
@@ -64,6 +70,8 @@ const RESULTS: QuestionResult[] = [
   { questionId: "q22a", blockIds: ["b7"], matchBasis: "label", confidence: 1, awarded: 1, total: 2, verdict: "partial", feedback: "RA is correct, but you stopped before writing the ratio RA : RB." },
   { questionId: "q22b", blockIds: [], matchBasis: "none", confidence: 0, awarded: 0, total: 2, verdict: "unanswered", feedback: "This question was not attempted." },
   { questionId: "q24a", blockIds: [], matchBasis: "none", confidence: 0, awarded: 0, total: 2, verdict: "unanswered", feedback: "This question was not attempted." },
+  { questionId: "q26a", blockIds: ["p10b3_1"], matchBasis: "semantic", confidence: 0.8, awarded: 1, total: 1, verdict: "correct", feedback: "Balanced correctly, and the state of each product is clear." },
+  { questionId: "q26b", blockIds: ["p10b3_2"], matchBasis: "semantic", confidence: 0.8, awarded: 1, total: 1, verdict: "correct", feedback: "Correct precipitation reaction and the equation balances." },
 ];
 
 export default function DebugMapping() {
@@ -86,9 +94,9 @@ export default function DebugMapping() {
         results: RESULTS,
         orphanBlockIds: ["b8"],
         summary: {
-          awarded: 6.5,
-          total: 12,
-          answered: 6,
+          awarded: 8.5,
+          total: 14,
+          answered: 8,
           unanswered: 2,
           unmatched: 1,
           overall:
