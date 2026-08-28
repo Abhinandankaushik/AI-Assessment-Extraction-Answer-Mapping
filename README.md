@@ -57,6 +57,13 @@ both were found by drawing the returned boxes back onto the page images:
   answers and reading order collapsed. Captioning makes page identity a local
   fact.
 
+Locating handwriting is perception rather than deliberation, so this read sat at
+the same low thinking level as the rest. That cost accuracy: on a page of worked
+algebra with wide gaps between steps, the box for `Q.22) (a) Lamp A -> Power =
+50W` landed five lines above the words, over the tail of the answer before it.
+One level up puts it on the handwriting and tightens the boxes that were dropping
+their last line, and on the sample batch it cost no wall clock at all.
+
 **3 · Mapping**
 No model call. Mapping is **entirely deterministic**, and that is the design,
 not a shortcut: the student already wrote down which question they were
@@ -114,6 +121,11 @@ student's intent, not the OCR quality.
 | Sub-parts bundled into one printed question | Split into separate rows, with the shared stem repeated so each reads on its own; a multiple-choice option list is explicitly not treated as sub-parts |
 | One written answer covering two sub-parts | Split at its "(a)"/"(b)" markers, each half with its own region — but only when the paper prints a sub-question for each |
 | The same question found by two passes | Deduped on the bare characters of the label, so "26 (b)" and "26(b)" cannot both become rows |
+| A number the student padded | `Q.09)` and a printed `9.` reduce to the same key; compared as raw strings they never met |
+| Two answers run together in one block | A written question number always ends the block above it. Without that rule the model merged `Q.23` into the answer above it and `Q.25` into `24 (b)(ii)`, and both were reported unanswered while sitting on the page |
+| The label read two different ways | The number is taken from the answer's own transcription, with the model's separate field kept as a second reading. A sheet saying `Q.24) (b)` came back transcribed `Q.24) (i)`; whichever reading names a question the paper actually prints is the one used |
+| A page reported by position, not number | A number outside the batch that indexes into it is read as the position it plainly is. This one hides: the first batch is pages 1–4, where position and page number coincide, so a model reporting positions looks perfectly correct there and silently piles every later batch onto one page |
+| A bounding box reported inverted or past the page | Normalised and clamped per box, so one bad line box neither vanishes from the union (shortening the highlight) nor stretches it across the page |
 | Exact region highlight | Normalised boxes re-projected as percentages over the rendered page |
 | PDF **or images** | Either slot takes one PDF or a stack of page photos; images are ordered numerically (page2 before page10) and flattened into one renumbered page list |
 | Processing progress | Real staged progress (`Reading → Questions → Answers → Mapping`) with a live bar |
@@ -167,7 +179,17 @@ vercel --prod
 ```
 
 The key is only read at request time, so the build itself needs no secrets.
-The AI routes declare `maxDuration = 300`.
+
+Two things to know before deploying:
+
+- **Leave `GEMINI_MODELS` unset** unless you mean to override the fallback chain.
+  Adding it in a dashboard and leaving the value blank is not the same as
+  omitting it — it arrives as an empty string. The code now falls back on a
+  blank value as well as a missing one, but there is no reason to set it.
+- **`maxDuration = 300` needs a paid plan.** Vercel's Hobby tier caps functions
+  at 60s regardless of what the route declares, and reading a long question
+  paper alone can reach 80s. On Hobby that route will time out; the answer
+  batches (18–40s) and the marking (~11s) stay inside the cap.
 
 Requests go out **one at a time**, which is a deliberate trade. Running them
 together was quicker, but a batch that meets a rate limit rolls to the next
