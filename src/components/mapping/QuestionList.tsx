@@ -176,10 +176,12 @@ export function QuestionList() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="mb-3 flex items-center justify-between gap-3 px-1">
-        <h2 className="t-p3-bold text-ink">
-          Extracted Questions{" "}
-          <span className="hidden sm:inline">(from question paper)</span>
+      {/* The phone frame centres the full heading on a line of its own and
+          leaves the bulk toggle to the desktop, where there is room beside it —
+          each row still has its own chevron, so nothing becomes unreachable. */}
+      <div className="mb-3 flex items-center justify-center gap-3 px-1 md:justify-between">
+        <h2 className="t-p3-bold text-center text-ink md:text-left">
+          Extracted Questions (from question paper)
         </h2>
         <button
           type="button"
@@ -188,7 +190,7 @@ export function QuestionList() {
               allExpanded ? new Set() : new Set(questions.map((q) => q.id)),
             )
           }
-          className="t-p4 h-11 shrink-0 rounded-btn border-2 border-white/15 bg-white pr-5 pl-4 text-btn transition-transform active:scale-[0.98]"
+          className="t-p4 hidden h-11 shrink-0 rounded-btn border-2 border-white/15 bg-white pr-5 pl-4 text-btn transition-transform active:scale-[0.98] md:block"
         >
           {allExpanded ? "Collapse All" : "Expand All"}
         </button>

@@ -45,33 +45,20 @@ export function QuestionRow({
         active ? "border-2 border-brand-soft" : "border-2 border-transparent"
       }`}
     >
-      <div className="flex items-start gap-3">
-        <button
-          type="button"
-          onClick={onSelect}
-          className="flex min-w-0 flex-1 items-start gap-3 text-left"
-          aria-current={active ? "true" : undefined}
-        >
-          {/* The paper's own number, not the row position — sub-parts make the
-              two diverge (11(a) and 11(b) are two rows but one printed 11). */}
-          <Badge
-            n={question.parentNumber ?? question.displayNumber}
-            active={active}
-          />
-          <span className="min-w-0 flex-1 pt-1">
-            <span className="t-p3 block text-ink">
-              {question.subLabel && (
-                <span className="font-bold">{question.subLabel}. </span>
-              )}
-              {question.text}
-            </span>
-            {unanswered && (
-              <span className="t-p5 mt-1 block text-danger">Not attempted</span>
-            )}
-          </span>
-        </button>
+      {/* A phone stacks the row the way the design draws it: the number and the
+          mark on the first line, the question across the full width below.
+          Squeezed between a 32px badge and a 90px mark-and-chevron pair there
+          was about half a phone left for the text, which broke every question
+          into a narrow ribbon of three-word lines. */}
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+        {/* The paper's own number, not the row position — sub-parts make the
+            two diverge (11(a) and 11(b) are two rows but one printed 11). */}
+        <Badge
+          n={question.parentNumber ?? question.displayNumber}
+          active={active}
+        />
 
-        <div className="flex shrink-0 items-center gap-2 pt-0.5">
+        <div className="ml-auto flex shrink-0 items-center gap-2 pt-0.5 md:order-3">
           <ScorePill
             awarded={result?.awarded ?? null}
             total={result?.total ?? question.marks}
@@ -90,6 +77,23 @@ export function QuestionRow({
             />
           </button>
         </div>
+
+        <button
+          type="button"
+          onClick={onSelect}
+          aria-current={active ? "true" : undefined}
+          className="w-full min-w-0 text-left md:order-2 md:w-auto md:flex-1 md:pt-1"
+        >
+          <span className="t-p3 block text-ink">
+            {question.subLabel && (
+              <span className="font-bold">{question.subLabel}. </span>
+            )}
+            {question.text}
+          </span>
+          {unanswered && (
+            <span className="t-p5 mt-1 block text-danger">Not attempted</span>
+          )}
+        </button>
       </div>
 
       {expanded && result && (
