@@ -180,17 +180,6 @@ vercel --prod
 
 The key is only read at request time, so the build itself needs no secrets.
 
-Two things to know before deploying:
-
-- **Leave `GEMINI_MODELS` unset** unless you mean to override the fallback chain.
-  Adding it in a dashboard and leaving the value blank is not the same as
-  omitting it — it arrives as an empty string. The code now falls back on a
-  blank value as well as a missing one, but there is no reason to set it.
-- **`maxDuration = 300` needs a paid plan.** Vercel's Hobby tier caps functions
-  at 60s regardless of what the route declares, and reading a long question
-  paper alone can reach 80s. On Hobby that route will time out; the answer
-  batches (18–40s) and the marking (~11s) stay inside the cap.
-
 Requests go out **one at a time**, which is a deliberate trade. Running them
 together was quicker, but a batch that meets a rate limit rolls to the next
 model on its own — so one sheet could come back read by two models with two
