@@ -6,8 +6,7 @@ answer belongs to which question, marks each one, and highlights the **exact
 region of the sheet** the answer occupies.
 
 Built to the provided Figma design — every colour, radius, spacing value and
-type style was read out of the file's own Properties panel rather than eyeballed
-(see [`DESIGN_TOKENS.md`](./DESIGN_TOKENS.md)).
+type style was read out of the file's own Properties panel rather than eyeballed.
 
 - **Live URL:** _(add after deploy)_
 - **Stack:** Next.js 16 · React 19 · TypeScript · Tailwind v4 · zustand · pdf.js
