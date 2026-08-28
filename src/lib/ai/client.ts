@@ -32,6 +32,11 @@ export interface ImagePart {
   mimeType: string;
   /** Base64 payload without the data-url prefix. */
   data: string;
+  /** Text placed immediately before this image, naming it. Several scans of the
+   *  same ruled notebook are near-identical, and a model asked afterwards which
+   *  page a block came from has to count images to answer — which it gets
+   *  wrong. A caption next to each one makes that a local fact instead. */
+  label?: string;
 }
 
 /**
@@ -91,7 +96,10 @@ export async function generateJson<T>({
 }: GenerateOptions): Promise<T> {
   const parts = [
     { text: prompt },
-    ...images.map(({ mimeType, data }) => ({ inlineData: { mimeType, data } })),
+    ...images.flatMap(({ mimeType, data, label }) => [
+      ...(label ? [{ text: label }] : []),
+      { inlineData: { mimeType, data } },
+    ]),
   ];
 
   let lastError: unknown;

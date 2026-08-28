@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BBox } from "@/lib/types";
-import { buildParts, unionBoxes, widen } from "./answers";
+import { buildParts, resolvePage, unionBoxes, widen } from "./answers";
 
 const box = (ymin: number, xmin: number, ymax: number, xmax: number) => ({
   ymin,
@@ -57,6 +57,50 @@ describe("unionBoxes", () => {
       w: 1,
       h: 1,
     });
+  });
+
+  it("reads a line the model reported upside down", () => {
+    // Dropping it instead shortens the highlight by exactly that line.
+    expectBox(unionBoxes([box(140, 800, 100, 200)], 0), {
+      x: 0.2,
+      y: 0.1,
+      w: 0.6,
+      h: 0.04,
+    });
+  });
+
+  it("holds a coordinate that overshot the page to the page", () => {
+    // One runaway value would otherwise stretch the band across everything.
+    expectBox(unionBoxes([box(100, 200, 140, 4000), box(150, 200, 190, 600)], 0), {
+      x: 0.2,
+      y: 0.1,
+      w: 0.8,
+      h: 0.09,
+    });
+  });
+});
+
+describe("resolvePage", () => {
+  it("takes a page number that is in the batch", () => {
+    expect(resolvePage(15, [13, 14, 15, 16])).toBe(15);
+  });
+
+  it("reads a position in the batch as the page it points at", () => {
+    // A model handed four images answers "which page?" with "3" as readily as
+    // with "15". Both say the same thing, and both have to land on page 15.
+    expect(resolvePage(3, [13, 14, 15, 16])).toBe(15);
+  });
+
+  it("falls back to the first page of the batch when it is neither", () => {
+    expect(resolvePage(0, [13, 14, 15, 16])).toBe(13);
+    expect(resolvePage(99, [13, 14, 15, 16])).toBe(13);
+    expect(resolvePage(Number.NaN, [13, 14, 15, 16])).toBe(13);
+  });
+
+  it("prefers the real page number when a batch contains its own positions", () => {
+    // The first batch is where position and page number coincide, which is why
+    // a model reporting positions looks correct there and fails everywhere else.
+    expect(resolvePage(3, [1, 2, 3, 4])).toBe(3);
   });
 });
 

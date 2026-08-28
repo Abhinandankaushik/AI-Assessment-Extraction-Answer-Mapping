@@ -24,6 +24,7 @@ const BOX = {
     ymax: { type: Type.INTEGER },
     xmax: { type: Type.INTEGER },
   },
+  propertyOrdering: ["ymin", "xmin", "ymax", "xmax"],
   required: ["ymin", "xmin", "ymax", "xmax"],
 } as const;
 
@@ -33,6 +34,7 @@ const PART = {
     marker: { type: Type.STRING },
     firstLine: { type: Type.INTEGER },
   },
+  propertyOrdering: ["marker", "firstLine"],
   required: ["marker", "firstLine"],
 } as const;
 
@@ -41,6 +43,12 @@ const PART = {
  * only then lays out the boxes, which is what keeps them aligned: asking for
  * text and geometry line by line made it emit each box against the line it had
  * just left, so every highlight sat one line too high and dropped its last line.
+ *
+ * "propertyOrdering" is what actually enforces that. The order of a schema's
+ * "properties" map carries no such promise across the wire, so the ordering the
+ * comment above describes was documented but never binding, and the model was
+ * free to lay out geometry before it had transcribed anything — which is
+ * exactly the failure the ordering exists to prevent.
  */
 const SCHEMA = {
   type: Type.OBJECT,
@@ -58,10 +66,20 @@ const SCHEMA = {
           blockBox: BOX,
           parts: { type: Type.ARRAY, items: PART },
         },
+        propertyOrdering: [
+          "page",
+          "labelOnSheet",
+          "transcription",
+          "continuesFromPrevPage",
+          "lineBoxes",
+          "blockBox",
+          "parts",
+        ],
         required: ["page", "transcription", "continuesFromPrevPage", "lineBoxes"],
       },
     },
   },
+  propertyOrdering: ["blocks"],
   required: ["blocks"],
 } as const;
 
@@ -91,12 +109,12 @@ function buildPrompt(pageNumbers: number[], totalPages: number): string {
   const list = pageNumbers.join(", ");
   return `
 You are given ${pageNumbers.length} image(s) from one student's handwritten answer sheet.
-In the order supplied, they are page ${list} of ${totalPages}.
+They are page ${list} of ${totalPages}, and each image is captioned with its page number on the line directly above it.
 
 Identify every distinct ANSWER BLOCK across these pages.
 
 For each block report:
-- "page": which page number it appears on, taken from the list above.
+- "page": the number captioned above the image this block appears in. Read it off that caption. Do not count images, and do not infer the page from what the answer says or from which question you expect to come next — consecutive pages of the same ruled notebook look alike, and a block filed against the wrong one is drawn over somebody else's work.
 - "labelOnSheet": the question number the student wrote next to the answer, copied verbatim and IN FULL. Include any sub-part letter belonging to the label even when it sits on the next line or in brackets — write "Q.24) (b)" rather than just "Q.24)", and "Q 22 (a)" rather than "Q 22". Use null only when the student wrote no number at all.
 - "transcription": the handwriting transcribed as accurately as you can. Describe drawings in square brackets, e.g. "[labelled diagram of a nephron]". Keep chemical formulae and equations readable as plain text. Keep any sub-part marker the student wrote at the start of a line, such as "(a)" or "(b)".
 - "continuesFromPrevPage": true ONLY when the block has no label of its own and continues an answer that began on an earlier page.
@@ -108,7 +126,9 @@ Bounding boxes use integers from 0 to 1000, normalised to the page image the blo
 where (xmin, ymin) is the top-left corner and (xmax, ymax) the bottom-right corner.
 
 Rules for "lineBoxes" — these decide whether the answer is highlighted correctly:
+- Write the fields in the order listed above. Transcribe the block in full BEFORE you place a single box, then go back over the lines you transcribed and box each one. Boxing as you read makes every box land on the line above the words it belongs to.
 - Return one box for EVERY line you transcribed, first to last. An answer that ends with a result, a final step or a one-line conclusion must have a box for that line too.
+- A box belongs to the line it wraps. Before you finish, re-read your first box against the first line of your transcription: "ymin" must sit at the TOP of that handwriting, not on the line above it and not in the printed header.
 - The FIRST box must reach left far enough to include the question number the student wrote beside the answer, so the number is highlighted along with the answer it belongs to.
 - Boxes must wrap the handwriting tightly. Never return a box covering the whole page.
 - Check the last line before you finish: if the block's transcription ends with a line that has no box, add it.
@@ -116,6 +136,7 @@ Rules for "lineBoxes" — these decide whether the answer is highlighted correct
 
 Other rules:
 - Group consecutive lines belonging to the same answer into ONE block. Do not emit one block per line.
+- A question number the student wrote ALWAYS ends the block above it and starts a new one, however little of the page separates them. A block whose transcription contains "Q.23)" anywhere but the very start is two answers run together, and the second one is then lost: split it.
 - Ignore printed ruled lines, margin rules, page numbers, QR codes, invigilator marks and the printed booklet header.
 - Section headings such as "Section-A" are not answers. Skip them.
 - Transcribe only what is written. If a page is blank, emit nothing for it.
@@ -124,15 +145,27 @@ Other rules:
 
 const CLAMP = (n: number) => Math.min(1, Math.max(0, n));
 
+/** Coordinates are promised as 0-1000, and a model that overshoots or reverses
+ *  a pair should cost that box its own geometry, not the whole block's: a
+ *  dropped line box shortens the highlight, and a runaway one stretches it
+ *  across the page. */
+function normalise(box: RawBox): RawBox | null {
+  const values = [box.ymin, box.xmin, box.ymax, box.xmax].map(Number);
+  if (values.some((n) => !Number.isFinite(n))) return null;
+  const [ymin, xmin, ymax, xmax] = values.map((n) => Math.min(1000, Math.max(0, n)));
+  return {
+    ymin: Math.min(ymin, ymax),
+    xmin: Math.min(xmin, xmax),
+    ymax: Math.max(ymin, ymax),
+    xmax: Math.max(xmin, xmax),
+  };
+}
+
 /** Collapses the per-line boxes into the single tight rectangle the UI draws. */
 export function unionBoxes(boxes: RawBox[], padding = 0.008): BBox | null {
-  const valid = boxes.filter(
-    (b) =>
-      Number.isFinite(b.xmin) &&
-      Number.isFinite(b.ymin) &&
-      b.xmax > b.xmin &&
-      b.ymax > b.ymin,
-  );
+  const valid = boxes
+    .map(normalise)
+    .filter((b): b is RawBox => b !== null && b.xmax > b.xmin && b.ymax > b.ymin);
   if (valid.length === 0) return null;
 
   const xmin = Math.min(...valid.map((b) => b.xmin)) / 1000;
@@ -260,6 +293,28 @@ export function buildParts(
   return parts;
 }
 
+/**
+ * Which page of the whole sheet a block was reported on.
+ *
+ * Pages ride in batches, so the fourth batch is told it is showing pages 13-16
+ * — and a model handed four images answers "which page is this?" with "3" about
+ * as readily as with "15". Both are usable: a number outside the batch that
+ * indexes into it is read as the position it plainly is. Only a number that is
+ * neither falls back, and it falls back to the batch's first page because a
+ * block has to be drawn somewhere.
+ *
+ * The distinction matters more than it looks. The first batch is pages 1-4,
+ * where position and page number are the same, so a model reporting positions
+ * looks perfectly correct there and silently piles every later batch onto one
+ * page.
+ */
+export function resolvePage(reported: number, pageNumbers: number[]): number {
+  const page = Math.trunc(Number(reported));
+  if (pageNumbers.includes(page)) return page;
+  if (page >= 1 && page <= pageNumbers.length) return pageNumbers[page - 1];
+  return pageNumbers[0];
+}
+
 const byReadingOrder = (a: AnswerBlock, b: AnswerBlock) =>
   a.regions[0].page - b.regions[0].page || a.regions[0].box.y - b.regions[0].box.y;
 
@@ -302,12 +357,20 @@ async function readBatch(
   const result = await generateJson<{ blocks: RawBlock[] }>({
     system: SYSTEM,
     prompt: buildPrompt(pageNumbers, totalPages),
-    images,
+    images: images.map((image, index) => ({
+      ...image,
+      label: `=== PAGE ${pageNumbers[index] ?? index + 1} of ${totalPages} ===`,
+    })),
     schema: SCHEMA,
-    thinking: ThinkingLevel.LOW,
+    // Locating handwriting is perception, not deliberation, so this sat at LOW
+    // to match the rest of the reads. It was costing accuracy: on a page of
+    // worked algebra with wide gaps between steps, LOW put the box for "Q.22)
+    // (a) Lamp A -> Power = 50W" five lines above the words, over the tail of
+    // the answer before it. MEDIUM lands it on the handwriting, tightens the
+    // boxes that were dropping their last line, and on the sample batch did not
+    // cost wall clock at all.
+    thinking: ThinkingLevel.MEDIUM,
   });
-
-  const allowed = new Set(pageNumbers);
 
   return (result.blocks ?? [])
     .map((block, index) => {
@@ -317,10 +380,16 @@ async function readBatch(
       const transcription = block.transcription?.trim() ?? "";
       if (!box || !transcription) return null;
 
-      const page = allowed.has(block.page) ? block.page : pageNumbers[0];
+      const page = resolvePage(block.page, pageNumbers);
       // Read out of the transcription first: the number and the words came
-      // back together, so they cannot belong to different answers.
-      const label = leadingLabel(transcription) ?? block.labelOnSheet?.trim();
+      // back together, so they cannot belong to different answers. The model's
+      // own field is kept as a second reading for the mapper, because either
+      // can be a misread — a sheet saying "Q.24) (b)" came back transcribed
+      // "Q.24) (i)", which addresses a sub-part the paper does not print.
+      // A label the student wrote over two lines comes back with the newline in
+      // it, and it is shown on the highlight tag as well as matched on.
+      const reported = block.labelOnSheet?.replace(/\s+/g, " ").trim() || null;
+      const label = leadingLabel(transcription) ?? reported;
       const parts = buildParts(
         block.parts,
         lineBoxes,
@@ -332,6 +401,7 @@ async function readBatch(
       return {
         id: `p${page}b${index + 1}`,
         labelOnSheet: label ? label : null,
+        ...(reported && reported !== label ? { labelReported: reported } : {}),
         transcription,
         regions: [{ page, box }],
         continuesFromPrevPage: Boolean(block.continuesFromPrevPage),
