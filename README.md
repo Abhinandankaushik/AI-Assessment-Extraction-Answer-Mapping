@@ -217,11 +217,16 @@ location / {
     proxy_set_header X-Forwarded-Proto $scheme;
 
     # Default is 60s — the same limit the move off serverless was to escape.
-    proxy_connect_timeout 300s;
-    proxy_send_timeout    300s;
-    proxy_read_timeout    300s;
+    proxy_connect_timeout 600s;
+    proxy_send_timeout    600s;
+    proxy_read_timeout    600s;
 }
 ```
+
+600s rather than the 300s a normal run needs, because two paths stack calls
+inside a single request: a reply that comes back truncated is retried as two
+half-sized batches, and a model that is out of quota rolls to the next of four.
+Four fallbacks at 80s is already past 300 on its own.
 
 If you add HTTPS with certbot afterwards, check both settings again: it rewrites
 the config and can leave them behind in a block it no longer serves from.
