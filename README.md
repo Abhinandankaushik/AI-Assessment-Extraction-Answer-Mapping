@@ -8,7 +8,7 @@ region of the sheet** the answer occupies.
 Built to the provided Figma design — every colour, radius, spacing value and
 type style was read out of the file's own Properties panel rather than eyeballed.
 
-- **Live URL:** _(add after deploy)_
+- **Live URL:** <https://veda-ai.devsh.online>
 - **Stack:** Next.js 16 · React 19 · TypeScript · Tailwind v4 · zustand · pdf.js
 - **AI:** Google Gemini — `gemini-3.5-flash`, with automatic fallback across
   `gemini-3.6-flash`, `gemini-3-flash-preview` and `gemini-3.1-flash-lite` when
@@ -180,7 +180,8 @@ visible in a passing test suite.
 
 ## Deploying
 
-Deployed on **EC2 behind nginx, run by pm2**. Any Node host works, but a
+Running at <https://veda-ai.devsh.online> on **EC2 behind nginx, run by pm2**,
+with a Let's Encrypt certificate. Any Node host works, but a
 serverless one has to allow a long request: reading a dense question paper is a
 single call that can run past 60s, which is where Vercel's Hobby tier cuts a
 function off.
