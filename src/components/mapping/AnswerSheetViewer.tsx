@@ -183,14 +183,18 @@ export function AnswerSheetViewer() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-card bg-surface">
+      {/* The title and the inspect toggle are desktop-only. Together with the
+          two control pills they need ~470px, so on a phone the row wrapped and
+          "Answer Sheet" broke across two lines — and the tab above the panel
+          already says which of the two is open. */}
       <header
-        className="flex h-16 shrink-0 items-center justify-between gap-3 px-6"
+        className="flex h-14 shrink-0 items-center justify-between gap-2 px-3 md:h-16 md:gap-3 md:px-6"
         style={{
           backgroundColor: "var(--color-ink)",
           borderBottom: "1.25px solid rgb(0 0 0 / 0.1)",
         }}
       >
-        <div className="flex items-center gap-3">
+        <div className="hidden items-center gap-3 md:flex">
           <h2 className="t-p3-bold text-white">Answer Sheet</h2>
           {INSPECTABLE && (
             <button
@@ -206,7 +210,7 @@ export function AnswerSheetViewer() {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center justify-between gap-2 md:w-auto md:justify-end">
           <div className="flex items-center gap-1 rounded-pill bg-[#464646] px-2 py-1 text-white">
             <button
               type="button"
