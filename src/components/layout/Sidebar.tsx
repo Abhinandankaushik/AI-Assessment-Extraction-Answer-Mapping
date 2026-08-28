@@ -40,8 +40,12 @@ function SchoolCrest({ size = 40 }: { size?: number }) {
   );
 }
 
-/** Collapsing is a user action, never an automatic one — the rail only appears
- *  after the header toggle is pressed. */
+/**
+ * The rail the design switches to once a run starts. Which state it is in is
+ * held in the store rather than derived from the phase, so the toggle still
+ * works inside a phase: the run collapses it, returning to the upload screen
+ * expands it, and pressing the button wins over both.
+ */
 export function Sidebar() {
   const collapsed = useAppStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);

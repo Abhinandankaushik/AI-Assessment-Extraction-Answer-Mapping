@@ -18,6 +18,7 @@ export default function ReviewPage() {
   const setProgress = useAppStore((s) => s.setProgress);
   const fail = useAppStore((s) => s.fail);
   const loadRun = useAppStore((s) => s.loadRun);
+  const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed);
   const running = useRef(false);
 
   useEffect(() => {
@@ -28,6 +29,10 @@ export default function ReviewPage() {
       router.replace("/");
       return;
     }
+    // Extracting and the mapping that follows both run against the rail, so the
+    // sheet and the question column get the width the design gives them.
+    setSidebarCollapsed(true);
+
     // Already have the result for exactly these files — don't pay for it twice.
     if (runKey === key || running.current) return;
 
@@ -41,7 +46,16 @@ export default function ReviewPage() {
       .finally(() => {
         running.current = false;
       });
-  }, [files, runKey, router, setPhase, setProgress, fail, loadRun]);
+  }, [
+    files,
+    runKey,
+    router,
+    setPhase,
+    setProgress,
+    fail,
+    loadRun,
+    setSidebarCollapsed,
+  ]);
 
   return (
     <AppShell variant={phase === "mapping" ? "mapping" : "page"}>

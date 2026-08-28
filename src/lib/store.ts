@@ -62,6 +62,7 @@ interface AppState extends Omit<RunData, "summary"> {
   selectQuestion: (questionId: string | null) => void;
   selectBlock: (blockId: string | null) => void;
   toggleSidebar: () => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
   loadRun: (run: RunData, runKey?: string | null) => void;
   reset: () => void;
 }
@@ -123,6 +124,7 @@ export const useAppStore = create<AppState>((set) => ({
     set({ selectedBlockId, selectedQuestionId: null }),
   toggleSidebar: () =>
     set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
 
   loadRun: (run, runKey = null) =>
     set({
