@@ -69,7 +69,9 @@ export function DropZone({
         setDragging(false);
         accept(e.dataTransfer.files);
       }}
-      className={`relative grid h-[127px] flex-none place-items-center overflow-hidden rounded-drop border-[1.5px] border-dashed bg-surface px-2.5 py-4 transition-colors md:h-[181px] md:flex-1 md:p-2.5 ${
+      // Height comes from the card that holds both zones, which flexes with the
+      // window; pinning 181px here would fight it and bring the scrollbar back.
+      className={`relative grid h-[127px] flex-none place-items-center overflow-hidden rounded-drop border-[1.5px] border-dashed bg-surface px-2.5 py-4 transition-colors md:h-full md:flex-1 md:p-2.5 ${
         dragging ? "border-brand bg-brand/5" : "border-hairline"
       }`}
     >

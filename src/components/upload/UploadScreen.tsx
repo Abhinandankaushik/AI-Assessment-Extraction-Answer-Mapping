@@ -45,9 +45,17 @@ export function UploadScreen() {
   );
 
   return (
-    <div className="grid h-full place-items-center overflow-y-auto px-2.5 pb-6 md:px-4 md:py-4">
+    // "safe center" rather than plain centring: once the content is taller than
+    // the box, ordinary centring pushes its top above the scroll origin, where
+    // no amount of scrolling can reach it.
+    <div className="grid h-full place-items-center-safe overflow-y-auto px-2.5 pb-6 md:px-4 md:py-4">
       <div className="flex w-full max-w-[789px] flex-col items-center">
-        <div className="flex w-full flex-col items-center gap-5">
+        {/* Every measurement below was a hard pixel value, which is why this
+            screen scrolled: the shell's own chrome plus ~600px of content needs
+            about 780px of window, and a laptop at 125% browser zoom gives ~727.
+            The clamps hold the Figma sizes at the frame's height and give ground
+            as the window shrinks, so the screen fits instead of scrolling. */}
+        <div className="flex w-full flex-col items-center gap-[clamp(10px,2.2vh,20px)]">
           {/* Phone frames use a single dark 24px line; the desktop frame splits
               the headline and highlights the second half. */}
           <h1 className="text-center text-[24px] leading-[1.2] font-bold tracking-[-0.04em] text-dark md:text-[40px]">
@@ -62,7 +70,7 @@ export function UploadScreen() {
 
           <HeroIllustration />
 
-          <div className="flex w-full flex-col gap-3 rounded-[24px] bg-white/50 p-3 md:h-[205px] md:flex-row md:gap-4">
+          <div className="flex w-full flex-col gap-3 rounded-[24px] bg-white/50 p-3 md:h-[clamp(150px,26vh,205px)] md:flex-row md:gap-4">
             <DropZone
               kind="question"
               label="Question Paper"
@@ -83,7 +91,7 @@ export function UploadScreen() {
         </div>
 
         <PrimaryButton
-          className="mt-8 md:mt-10"
+          className="mt-8 md:mt-[clamp(16px,4vh,40px)]"
           disabled={!ready}
           onClick={() => router.push("/review")}
         >
