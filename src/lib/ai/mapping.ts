@@ -134,8 +134,23 @@ export function matchByLabel(
       if (!byKey.has(key)) byKey.set(key, q.id);
     }
   }
-  const lookup = (label: string) =>
-    byKey.get(numberKey(label)) ?? byKey.get(shallowKey(label));
+  /**
+   * The question a written label names, tried deepest first.
+   *
+   * The parent key is the step that makes multiple-choice work. A student
+   * answering "Q.9) (c) 100% round and yellow" has written the option they
+   * chose, not a sub-part address, and the paper prints no "9 (c)" for it to
+   * mean — so "9c" misses and "9" lands. The paper is the only thing that can
+   * tell those two apart, and it is right here.
+   */
+  const lookup = (label: string) => {
+    const parent = parentNumberOf(label);
+    return (
+      byKey.get(numberKey(label)) ??
+      byKey.get(shallowKey(label)) ??
+      (parent ? byKey.get(parent) : undefined)
+    );
+  };
 
   const assigned = new Map<string, string[]>();
   const leftovers: AnswerBlock[] = [];
@@ -174,7 +189,15 @@ export function matchByLabel(
   };
 
   for (const unit of groupUnits(blocks)) {
-    const label = unit[0].labelOnSheet;
+    // Two readings of the same handwritten number, and either can be a misread:
+    // a sheet saying "Q.24) (b)" came back transcribed "Q.24) (i)". Whichever
+    // names a question the paper actually prints is the right one, and only a
+    // label that resolves to nothing gives way.
+    const alternate = unit[0].labelReported;
+    const label =
+      alternate && !lookup(unit[0].labelOnSheet ?? "") && lookup(alternate)
+        ? alternate
+        : unit[0].labelOnSheet;
     const parent = label ? parentNumberOf(label) : null;
 
     if (label && parent) {
@@ -207,11 +230,30 @@ export function matchByLabel(
   return { assigned, leftovers };
 }
 
+/**
+ * Reading order is what "everything below a number belongs to it" means, so it
+ * is established here rather than assumed. The extraction sorts each batch and
+ * the pipeline sends the batches in order, which makes this a no-op today — and
+ * a wrong page number, a reordered request or a retry that returns its halves
+ * out of sequence would otherwise file answers under their neighbours in
+ * silence, which is the one failure this mapper cannot see.
+ *
+ * The sort is stable, so the parts of one written answer keep the order they
+ * were split in.
+ */
+const inReadingOrder = (blocks: AnswerBlock[]): AnswerBlock[] =>
+  blocks.slice().sort((a, b) => {
+    const first = a.regions[0];
+    const second = b.regions[0];
+    if (!first || !second) return 0;
+    return first.page - second.page || first.box.y - second.box.y;
+  });
+
 export function mapAnswersToQuestions(
   questions: ExtractedQuestion[],
   blocks: AnswerBlock[],
 ): MappingOutcome {
-  const { assigned, leftovers } = matchByLabel(questions, blocks);
+  const { assigned, leftovers } = matchByLabel(questions, inReadingOrder(blocks));
 
   const matches: QuestionMatch[] = [...assigned.entries()].map(
     ([questionId, blockIds]) => ({

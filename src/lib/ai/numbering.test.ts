@@ -137,12 +137,21 @@ describe("labels the way papers and students actually write them", () => {
 
 describe("leadingLabel", () => {
   it.each([
-    ["Q.9) (C) 100% round and yellow", "9"],
+    ["Q.9) (C) 100% round and yellow", "9 (C)"],
     ["Q.24) (b) (i) The transport system in plants", "24 (b) (i)"],
     ["(22) (a) Lamp A -> Power = 50 W", "22 (a)"],
     ["25. For a chemical change to occur", "25"],
   ])("reads the number %s opens with", (text, expected) => {
     expect(leadingLabel(text)).toBe(expected);
+  });
+
+  it("reports a trailing marker whatever case it was transcribed in", () => {
+    // Case used to decide whether "(c)" was an option or a sub-part. Nobody can
+    // read that off handwriting reliably, and the mapper has the question paper,
+    // which can. Both spellings must therefore reach it identically.
+    expect(numberKey(leadingLabel("Q.9) (c) 100% round")!)).toBe(
+      numberKey(leadingLabel("Q.9) (C) 100% round")!),
+    );
   });
 
   it.each([
@@ -154,5 +163,24 @@ describe("leadingLabel", () => {
     // A number needs the punctuation a question number is written with, or an
     // answer that happens to open with a digit would claim that question.
     expect(leadingLabel(text)).toBeNull();
+  });
+
+  it.each([
+    ["Q.7) No. Oxygen is not released at night.", "7"],
+    ["Q.15) So. the current halves", "15"],
+  ])("does not read an opening word as a sub-part in %s", (text, expected) => {
+    // Only the letters a part is actually labelled with count, or "No." is
+    // question 7 part "no" and the answer is filed against nothing.
+    expect(leadingLabel(text)).toBe(expected);
+  });
+});
+
+describe("leading zeros", () => {
+  it("reads a padded number as the question it is", () => {
+    // A student who writes "Q.09)" against a paper printing "9." matched
+    // nothing at all: the keys were compared as strings.
+    expect(numberKey("Q.09)")).toBe(numberKey("9."));
+    expect(parseQuestionNumber("Q.09) (a)").parentNumber).toBe("9");
+    expect(compactLabel("09 (a)")).toBe(compactLabel("9 (a)"));
   });
 });

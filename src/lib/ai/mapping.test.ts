@@ -121,6 +121,62 @@ describe("matchByLabel", () => {
     expect(assigned.get("q1")).toEqual(["b1"]);
   });
 
+  it("files a multiple-choice answer under the question, not a part of it", () => {
+    // "Q.9) (c) 100% round and yellow" names the option the student chose. The
+    // paper prints no 9 (c) for it to mean, so the answer belongs to 9 itself.
+    const questions = ["8", "9", "10"].map(question);
+    const { assigned, leftovers } = matchByLabel(questions, [
+      block("b1", "9 (c)"),
+      block("b2", "10 (C) (i)"),
+    ]);
+
+    expect(assigned.get("q1")).toEqual(["b1"]);
+    expect(assigned.get("q2")).toEqual(["b2"]);
+    expect(leftovers).toEqual([]);
+  });
+
+  it("still reads a marker as a sub-part when the paper prints one", () => {
+    // Same shape of label, opposite meaning — the paper is what tells them apart.
+    const questions = ["9 (a)", "9 (b)", "9 (c)"].map(question);
+    const { assigned } = matchByLabel(questions, [block("b1", "9 (c)")]);
+
+    expect(assigned.get("q2")).toEqual(["b1"]);
+  });
+
+  it("resolves a multiple-choice label even after the question is answered", () => {
+    // The old fallback took the first UNASSIGNED question under the parent, so
+    // a second block naming question 9 was stranded. The paper's own key is not
+    // consumed by an earlier match.
+    const questions = ["9", "10"].map(question);
+    const { assigned, leftovers } = matchByLabel(questions, [
+      block("b1", "9 (c)"),
+      block("b2", "Q.9) (c)"),
+    ]);
+
+    expect(assigned.get("q0")).toEqual(["b1", "b2"]);
+    expect(leftovers).toEqual([]);
+  });
+
+  it("takes the second reading of a number the paper does not print", () => {
+    // The sheet said "Q.24) (b)"; the transcription came back "(i)", which
+    // addresses a sub-part 24 has no printed form of. The paper decides.
+    const questions = ["24 (a)", "24 (b)"].map(question);
+    const { assigned } = matchByLabel(questions, [
+      { ...block("b1", "24 (i)"), labelReported: "Q.24) (b)" },
+    ]);
+
+    expect(assigned.get("q1")).toEqual(["b1"]);
+  });
+
+  it("keeps the first reading when it resolves", () => {
+    const questions = ["24 (a)", "24 (b)"].map(question);
+    const { assigned } = matchByLabel(questions, [
+      { ...block("b1", "24 (a)"), labelReported: "Q.24) (b)" },
+    ]);
+
+    expect(assigned.get("q0")).toEqual(["b1"]);
+  });
+
   it("leaves an answer numbered for a question the paper lacks", () => {
     const questions = ["1", "2"].map(question);
     const { assigned, leftovers } = matchByLabel(questions, [

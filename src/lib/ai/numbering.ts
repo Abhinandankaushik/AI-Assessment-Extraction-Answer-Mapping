@@ -1,5 +1,21 @@
 const PREFIX = /^\s*(?:q(?:uestion)?|ans(?:wer)?)\s*[.:-]?\s*/i;
 
+/** "09" and "9" are the same question. Without this they hash to different
+ *  keys and a student who pads their numbering matches nothing on the paper. */
+const stripZeros = (digits: string) => digits.replace(/^0+(?=\d)/, "");
+
+/**
+ * The letters and numerals a sub-part or a multiple-choice option is written
+ * with. Anything wider swallows ordinary words — "Q.7) No. because..." read as
+ * question 7, sub-part "No".
+ */
+const MARKER = String.raw`[a-h]|i{1,3}|iv|vi{0,3}|ix|x`;
+const BARE_MARKER = new RegExp(String.raw`^\(?\s*(${MARKER})\s*[).]?\s*$`, "i");
+const LEADING_MARKERS = new RegExp(
+  String.raw`^((?:\(?\s*(?:${MARKER})\s*[).]\s*){1,2})`,
+  "i",
+);
+
 /**
  * Splits a printed label such as "11 (a)" into its parent and sub-part.
  *
@@ -21,7 +37,7 @@ export function parseQuestionNumber(display: string): {
   if (!match) return { parentNumber: null, subLabel: null };
   const sub = match[2] ?? match[3] ?? null;
   return {
-    parentNumber: match[1] ?? null,
+    parentNumber: match[1] ? stripZeros(match[1]) : null,
     subLabel: sub ? sub.toLowerCase() : null,
   };
 }
@@ -33,10 +49,7 @@ export function parseQuestionNumber(display: string): {
  * by key.
  */
 export function bareSubPart(label: string): string | null {
-  // Restricted to plausible markers so a stray short word is never taken for one.
-  const match = label
-    .trim()
-    .match(/^\(?\s*([a-h]|i{1,3}|iv|vi{0,3}|ix|x)\s*[).]?\s*$/i);
+  const match = label.trim().match(BARE_MARKER);
   return match ? match[1].toLowerCase() : null;
 }
 
@@ -46,7 +59,7 @@ export function bareSubPart(label: string): string | null {
  * "24 (b)(ii)" stay apart.
  */
 export function compactLabel(display: string): string {
-  return display.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return stripZeros(display.toLowerCase().replace(/[^a-z0-9]/g, ""));
 }
 
 const SUB = String.raw`(?:\(\s*([a-z]{1,4})\s*\)|([a-z])\s*[.)])`;
@@ -71,7 +84,7 @@ export function numberKey(display: string): string {
   if (nested) {
     const first = nested[2] ?? nested[3];
     const second = nested[4] ?? nested[5];
-    return `${nested[1]}${first}${second}`.toLowerCase();
+    return `${stripZeros(nested[1])}${first}${second}`.toLowerCase();
   }
   return shallowKey(display);
 }
@@ -114,6 +127,12 @@ export function lastSubPart(display: string): string | null {
  * The digits must be followed by a bracket or a full stop — the punctuation a
  * question number is written with — or an answer opening "1 Joule of work..."
  * would announce itself as question 1.
+ *
+ * A marker trailing the number is reported as written. Whether "(c)" addresses
+ * a sub-part or names the option the student picked cannot be told from the
+ * sheet — an earlier version read it off letter case, which on handwriting is
+ * whatever the transcription guessed — so the mapper decides, against the parts
+ * the paper actually prints.
  */
 export function leadingLabel(text: string): string | null {
   const trimmed = text.trim();
@@ -122,12 +141,6 @@ export function leadingLabel(text: string): string | null {
   );
   if (!number) return null;
 
-  // Sub-parts are written in lower case and multiple-choice options in upper,
-  // so "Q.9) (C) 100% round" is question 9 with an option, not question 9 (c).
-  const subs = trimmed
-    .slice(number[0].length)
-    .match(/^((?:\(?\s*[a-z]{1,4}\s*[.)]\s*){1,2})/)?.[1]
-    ?.trim();
-
+  const subs = trimmed.slice(number[0].length).match(LEADING_MARKERS)?.[1]?.trim();
   return subs ? `${number[1]} ${subs}` : number[1];
 }

@@ -57,6 +57,11 @@ export interface AnswerBlock {
   id: string;
   /** The question number the student wrote next to the answer, if any. */
   labelOnSheet: string | null;
+  /** The same number as the extraction reported it in a field of its own, kept
+   *  only when it disagrees with the one read out of the transcription. The
+   *  mapper falls back to it when the first names no question the paper prints:
+   *  one of the two readings is a misread, and the paper says which. */
+  labelReported?: string;
   transcription: string;
   regions: AnswerRegion[];
   continuesFromPrevPage: boolean;
