@@ -53,13 +53,14 @@ const NOT_MARKED =
 /**
  * Marking is the slowest call in the run, and its cost is output tokens - two
  * sentences of feedback per question, written one after another. Splitting a
- * long paper lets those run at once.
+ * long paper keeps any single reply inside the output budget rather than
+ * having it cut off mid-JSON.
  *
  * The threshold is deliberately high. Below it one request does everything,
- * including the closing summary; above it the chunks are graded in parallel and
- * a separate, very short call writes the summary from the finished marks. That
- * costs one extra request, which only a paper long enough to be worth the wait
- * should pay.
+ * including the closing summary; above it the chunks are marked one after
+ * another and a separate, very short call writes the summary from the finished
+ * marks. That costs one extra request, which only a paper long enough to need
+ * the split should pay.
  */
 const GRADES_PER_REQUEST = 16;
 

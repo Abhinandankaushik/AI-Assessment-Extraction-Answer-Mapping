@@ -18,8 +18,9 @@ type style was read out of the file's own Properties panel rather than eyeballed
 
 ## Approach
 
-The run is a four-pass pipeline. Passes 1, 2 and 4 talk to Gemini; the hard part
-of pass 3 is deliberately plain code.
+The run is a four-pass pipeline. Passes 1, 2 and 4 talk to Gemini. Pass 3 —
+deciding which answer belongs to which question — makes **no model call at
+all**; it is plain, deterministic code, and that is the point.
 
 **1 · Question extraction**
 The question paper goes to the model as-is when it is a PDF (crisper than
@@ -37,24 +38,52 @@ The answer sheet is rasterised in the browser to one bitmap per page. Pages are
 sent to the model **in batches**, and for each answer block it returns the label
 the student wrote, a transcription, whether the block continues an answer from an
 earlier page, and **one bounding box per written line** (normalised 0–1000).
-The line boxes are unioned into the single tight rectangle the UI draws.
+The line boxes are unioned into the single tight rectangle the UI draws, then
+allowed to reach down to the whole-block box the model reports separately —
+capped, and only downward, since that rescues a dropped last line without ever
+dragging the highlight over the answer above.
+
+Two details here decide whether a highlight lands on its handwriting at all, and
+both were found by drawing the returned boxes back onto the page images:
+
+- **Field order is enforced, not just documented.** The model has to transcribe
+  a block in full before it places a single box; boxing as it reads puts every
+  box on the line it just left. A schema's `properties` map promises nothing
+  about order over the wire — `propertyOrdering` is what binds it.
+- **Every image is captioned with its page number, inline, immediately before
+  it.** Four scans of the same ruled notebook are near-identical, and a model
+  asked afterwards which page a block came from has to count images. It
+  miscounted: pages 3 and 4 came back swapped, so answers were drawn over other
+  answers and reading order collapsed. Captioning makes page identity a local
+  fact.
 
 **3 · Mapping**
-Answers that carry a written question number are matched **in plain code** by
-normalising both sides (`Q.22)(a)` and `22 (a)` both reduce to `22a`). That is
-exact, free, and stops the model from second-guessing a label the student wrote
-themselves.
+No model call. Mapping is **entirely deterministic**, and that is the design,
+not a shortcut: the student already wrote down which question they were
+answering, and nothing available here is better evidence than that.
 
-Two things decided in code rather than by the model do most of the work here:
+*Which question an answer names.* Both sides are normalised until they meet —
+`Q.22)(a)` and `22 (a)` both reduce to `22a`. The number is read out of the
+answer's own transcription rather than from a field beside it, so the number and
+the words that came back with it cannot belong to different answers.
 
-*Where an answer ends.* A long answer often comes back as several blocks, only
-the first of which carries the number. Text counts as a continuation when it
-runs on directly under the answer above it, or when it opens the following page
-— both measured from the bounding boxes, because the model's own
-`continuesFromPrevPage` flag misses short fragments. Text that starts after a
-gap, or partway down a fresh page, is left alone: that space is what a new
-answer looks like. The same rule runs again after the semantic pass, so
-fragments below an answer matched by content find their owner too.
+A written label is resolved deepest-first: the full key, then the key with the
+innermost sub-part dropped, then the bare question number, then the first
+unanswered sub-part under it. That last-but-one step is what makes
+multiple-choice work. A student answering `Q.9) (c) 100% round and yellow` has
+written the option they chose, not a sub-part address — the paper prints no
+`9 (c)` for it to mean, so `9c` misses and `9` lands. Only the question paper
+can tell those two apart, and only this pass has it.
+
+*Where an answer ends.* A written number opens a question and everything below
+belongs to it until the next number appears — however far down, across however
+many page breaks. Within that run `(a)` opens a sub-part and holds until `(b)`.
+
+Earlier versions were cleverer and worse. Geometry decided whether a fragment
+continued the answer above it, and whatever fell through was handed to the model
+to match on subject matter. Both failed in ways a teacher spots instantly: half
+an answer highlighted because a gap was a millimetre too wide, and answers filed
+under questions they were plainly not written for. Both were removed.
 
 *Whether an answer has sub-parts.* A student may write "(a)" and "(b)" under one
 number, or number four observations "(i)" to "(iv)" inside a single answer.
@@ -62,8 +91,8 @@ These look identical on the page, so the split is decided against the question
 paper: an answer is only broken apart when the paper prints a sub-question for
 **every** marker in it. Otherwise it stays whole, and highlights and marks as one.
 
-Only what is left over reaches the model, which matches by subject matter and is
-explicitly allowed to return "no match".
+Anything written before the first question number is reported as unmatched
+rather than guessed at.
 
 **4 · Grading**
 One text-only call marks every located answer out of its printed marks, returns
@@ -78,9 +107,10 @@ student's intent, not the OCR quality.
 | Every question, printed order | Extraction + audit pass; recovered items spliced positionally |
 | `11 (a)` / `11 (b)` as separate entries | Enforced by schema and prompt, re-checked by the audit pass, with a conservative code-level splitter behind both |
 | Answers written out of order | Matching is label-driven; sheet position is never assumed |
+| A written marker the paper has no sub-part for | Resolved against the paper, deepest key first, so `Q.9) (c)` on a multiple-choice question lands on `9` rather than a `9 (c)` that does not exist |
 | Unanswered questions | No block → `unanswered`, shown greyed with a red `0 / N` pill |
 | Answers matching no question | Collected into an **Unmatched answers** section under the list |
-| Answers spanning pages | Continuations are detected from box geometry as well as the model's flag, within a page and across a page break; the viewer highlights every region and tags only the first |
+| Answers spanning pages | A written number holds until the next one appears, across any number of page breaks; the viewer highlights every region and tags only the first |
 | Sub-parts bundled into one printed question | Split into separate rows, with the shared stem repeated so each reads on its own; a multiple-choice option list is explicitly not treated as sub-parts |
 | One written answer covering two sub-parts | Split at its "(a)"/"(b)" markers, each half with its own region — but only when the paper prints a sub-question for each |
 | The same question found by two passes | Deduped on the bare characters of the label, so "26 (b)" and "26(b)" cannot both become rows |
@@ -107,17 +137,23 @@ Get a free key at <https://aistudio.google.com/apikey>.
 
 ## Tests
 
-`npm test` runs 69 unit tests over the pure functions where a mistake is silent
+`npm test` runs 109 unit tests over the pure functions where a mistake is silent
 rather than loud: question-number normalisation, the union of line boxes into
-the rectangle the UI draws, the deterministic label pass, the continuation
-rules, and both sub-part splitters.
+the rectangle the UI draws, the deterministic label pass, page resolution within
+a batch, and both sub-part splitters.
 
 They pin the requirements that are easiest to regress — out-of-order answers,
 multi-page answers, sub-parts, answers matching no question — and each one that
-came out of a real run keeps its counter-case next to it: an answer is absorbed
-when it runs on, and left alone when a gap says it is something new; a marker
-list splits when the paper has parts for it, and does not when the paper has
-none.
+came out of a real run keeps its counter-case next to it: a marker list splits
+when the paper has parts for it and does not when the paper has none; a written
+`(c)` addresses a sub-part when the paper prints one and the question itself
+when it does not.
+
+Unit tests are not what settles this app, though. Whether a highlight sits on
+its handwriting is only answerable by looking: rasterise the sample PDF, POST
+the pages at the API routes, draw the returned boxes back onto the page images
+and open them. Both geometry bugs above were found that way and neither was
+visible in a passing test suite.
 
 ## Deploying
 
@@ -131,11 +167,15 @@ vercel --prod
 ```
 
 The key is only read at request time, so the build itself needs no secrets.
-The AI routes declare `maxDuration = 300`. Nothing waits on anything it does
-not need: the paper and the answer sheet are read concurrently, the answer pages
-go out as parallel batches of four, and a long paper is marked in parallel
-chunks. Per-request timings on the 10-page sample are 10-30s, and the request
-count is unchanged by any of it.
+The AI routes declare `maxDuration = 300`.
+
+Requests go out **one at a time**, which is a deliberate trade. Running them
+together was quicker, but a batch that meets a rate limit rolls to the next
+model on its own — so one sheet could come back read by two models with two
+ideas of where a line sits. Reading in order keeps a run internally consistent,
+which matters more here than the couple of minutes it costs. A full run of the
+10-page sample is around three minutes, and the request count is the same either
+way.
 
 ## Sample files
 
@@ -156,9 +196,12 @@ answers run across page breaks.
 - **Free-tier quota is the real constraint.** Gemini's free tier allows roughly
   **20 requests per day per model**. A full run of the 10-page sample costs
   seven or eight, so the app batches four answer pages into each request and
-  falls back across four models when one is exhausted. Running requests
-  concurrently is what makes it quick; it does not make it cost more. When all four are spent the UI says so plainly
-  instead of rendering an empty result.
+  falls back across four models when one is exhausted. When all four are spent
+  the UI says so plainly instead of rendering an empty result.
+- **A run takes about three minutes**, and that is a choice. Requests are issued
+  one at a time so a rate-limited batch cannot silently roll to a different
+  model mid-sheet and come back with a different idea of where a line sits.
+  Consistency was worth more here than the minutes.
 - **Marking is indicative.** The model marks against the printed question, not an
   official marking scheme, so awarded marks are a teacher's starting point rather
   than a final grade.
