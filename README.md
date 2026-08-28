@@ -10,8 +10,9 @@ type style was read out of the file's own Properties panel rather than eyeballed
 
 - **Live URL:** _(add after deploy)_
 - **Stack:** Next.js 16 · React 19 · TypeScript · Tailwind v4 · zustand · pdf.js
-- **AI:** Google Gemini (`gemini-3.5-flash`, with automatic fallback across
-  `gemini-3.6-flash`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite`)
+- **AI:** Google Gemini — `gemini-3.5-flash`, with automatic fallback across
+  `gemini-3.6-flash`, `gemini-3-flash-preview` and `gemini-3.1-flash-lite` when
+  a model hits its free-tier daily quota
 
 ---
 
@@ -20,6 +21,15 @@ type style was read out of the file's own Properties panel rather than eyeballed
 The run is a four-pass pipeline. Passes 1, 2 and 4 talk to Gemini. Pass 3 —
 deciding which answer belongs to which question — makes **no model call at
 all**; it is plain, deterministic code, and that is the point.
+
+| Pass | In one line |
+| --- | --- |
+| **1 · Question extraction** | The paper goes to the model as a PDF, under a schema forcing one entry per printed number so `11 (a)` and `11 (b)` stay separate. A completeness-audit pass re-reads the pages against that list and splices anything missed back into reading order. |
+| **2 · Answer extraction** | Pages are rasterised in the browser and sent in batches, each image captioned with its page number. Back comes the label the student wrote, a transcription, and one bounding box per written line. |
+| **3 · Mapping** | Deterministic, no model. A written number opens a question and everything below belongs to it until the next number, across any number of page breaks. Labels resolve against the paper deepest-key-first, so an MCQ answer written `Q.9) (c)` lands on question 9 rather than a `9 (c)` the paper never printed. |
+| **4 · Grading** | One text-only call marks each located answer out of its printed marks and returns a verdict, feedback, and an overall summary. |
+
+In detail:
 
 **1 · Question extraction**
 The question paper goes to the model as-is when it is a PDF (crisper than
