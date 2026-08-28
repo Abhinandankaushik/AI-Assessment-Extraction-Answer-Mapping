@@ -180,16 +180,56 @@ visible in a passing test suite.
 
 ## Deploying
 
-Any Next.js host works; this was built for Vercel.
+Deployed on **EC2 behind nginx, run by pm2**. Any Node host works, but a
+serverless one has to allow a long request: reading a dense question paper is a
+single call that can run past 60s, which is where Vercel's Hobby tier cuts a
+function off.
 
 ```bash
-vercel login
-vercel link
-vercel env add GEMINI_API_KEY production   # paste the key when prompted
-vercel --prod
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs nginx git
+sudo npm i -g pm2
+
+git clone <repo> app && cd app
+npm ci
+printf 'GEMINI_API_KEY=your_key_here\n' > .env.local   # leave GEMINI_MODELS unset
+npm run build
+
+pm2 start ecosystem.config.js
+pm2 save && pm2 startup      # run the command it prints, so it survives a reboot
 ```
 
 The key is only read at request time, so the build itself needs no secrets.
+Use an instance with 2GB — `next build` will be killed on a 1GB box.
+
+Two nginx defaults have to be raised, and both are silent when they are not:
+
+```nginx
+# Base64 inflates an upload by about a third, so the 10MB cap becomes a
+# ~13.4MB body. The default is 1M, and it answers 413.
+client_max_body_size 20M;
+
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Default is 60s — the same limit the move off serverless was to escape.
+    proxy_connect_timeout 300s;
+    proxy_send_timeout    300s;
+    proxy_read_timeout    300s;
+}
+```
+
+If you add HTTPS with certbot afterwards, check both settings again: it rewrites
+the config and can leave them behind in a block it no longer serves from.
+
+`maxDuration = 300` in the API routes is a Vercel directive. It is ignored when
+self-hosting and left in place so the app can still be deployed there.
+
+To update: `git pull && npm ci && npm run build && pm2 restart veda`.
 
 Requests go out **one at a time**, which is a deliberate trade. Running them
 together was quicker, but a batch that meets a rate limit rolls to the next
