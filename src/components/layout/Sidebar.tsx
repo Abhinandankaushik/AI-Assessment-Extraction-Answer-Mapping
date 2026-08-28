@@ -58,7 +58,7 @@ export function Sidebar() {
           <button
             type="button"
             aria-label="AI Teacher's Toolkit"
-            className="grid size-10 place-items-center rounded-full bg-dark text-white ring-2 ring-brand ring-offset-2 ring-offset-white"
+            className="grid size-10 place-items-center rounded-full bg-dark text-white ring-2 ring-brand"
           >
             <Sparkles size={18} />
           </button>
@@ -115,7 +115,7 @@ export function Sidebar() {
 
         <button
           type="button"
-          className="font-ui mt-14 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-dark text-[16px] font-medium tracking-[-0.04em] text-white ring-2 ring-brand ring-offset-2 ring-offset-white transition-transform active:scale-[0.99]"
+          className="font-ui mt-14 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-dark text-[16px] font-medium tracking-[-0.04em] text-white ring-2 ring-brand transition-transform active:scale-[0.99]"
           style={{ boxShadow: "0 6px 20px 0 rgb(255 86 35 / 0.28)" }}
         >
           <Sparkles size={16} />
