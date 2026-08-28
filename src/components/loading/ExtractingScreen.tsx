@@ -44,19 +44,23 @@ export function ExtractingScreen() {
           {progress.label || "Starting…"}
         </p>
 
-        <ol className="mt-5 flex items-center justify-between">
+        {/* A phone used to get the dots on their own: four labels would not sit
+            beside four dots in 320px, so they were hidden and the row said
+            nothing about which stage it was. Stacking the label under its dot
+            fits at any width, so the stage is named on every screen. */}
+        <ol className="mt-5 flex items-start justify-between gap-1">
           {STAGES.map((stage, index) => {
             const done = activeIndex > index || progress.stage === "done";
             const active = activeIndex === index;
             return (
               <li
                 key={stage.key}
-                className={`t-p5 flex items-center gap-2 ${
+                className={`flex flex-1 flex-col items-center gap-1.5 text-center sm:flex-row sm:gap-2 sm:text-left ${
                   done || active ? "text-dark" : "text-muted/60"
                 }`}
               >
                 <span
-                  className={`size-2 rounded-full ${
+                  className={`size-2 shrink-0 rounded-full ${
                     done
                       ? "bg-success"
                       : active
@@ -64,7 +68,12 @@ export function ExtractingScreen() {
                         : "bg-surface-3"
                   }`}
                 />
-                <span className="hidden sm:inline">{stage.label}</span>
+                {/* Spelled out rather than reusing .t-p5: that is a plain class
+                    in globals.css, not a registered utility, so "sm:t-p5" would
+                    never be generated and the label would stay 11px. */}
+                <span className="text-[11px] leading-[1.3] tracking-[-0.04em] sm:text-[14px] sm:leading-[1.4]">
+                  {stage.label}
+                </span>
               </li>
             );
           })}
