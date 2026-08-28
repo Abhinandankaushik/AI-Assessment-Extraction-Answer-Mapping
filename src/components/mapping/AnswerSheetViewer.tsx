@@ -320,12 +320,14 @@ export function AnswerSheetViewer() {
                 >
                   {region === firstRegion && (
                     <span
-                      className={`t-p3-bold absolute left-0 h-[30px] px-3 leading-[30px] text-white ${
-                        // The page clips its own overflow, so an answer starting
-                        // at the top of a page would lose a tag drawn above it.
-                        region.box.y * 100 < 4
-                          ? "top-0 rounded-b-xl"
-                          : "-top-[30px] rounded-t-xl"
+                      className={`absolute left-0 h-5 rounded-md px-1.5 text-[12px] leading-5 font-bold tracking-[-0.04em] text-white ${
+                        // Sits on the box's own top-left corner, as the design
+                        // draws it. A full tag-height above put the label in
+                        // open paper — on a band that already reaches into the
+                        // gap above the writing it read as pointing at nothing.
+                        // The page clips its own overflow, so a box against the
+                        // top of a page keeps the tag inside it instead.
+                        region.box.y * 100 < 2 ? "top-0" : "-top-[10px]"
                       }`}
                       style={{ backgroundColor: accent.tag }}
                     >
