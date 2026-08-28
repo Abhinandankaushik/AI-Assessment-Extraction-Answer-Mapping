@@ -2,18 +2,30 @@ import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 
 export { ThinkingLevel };
 
+const DEFAULT_MODELS =
+  "gemini-3.5-flash,gemini-3.6-flash,gemini-3-flash-preview,gemini-3.1-flash-lite";
+
 /**
  * Free-tier quota is per-model-per-day (20 requests on some models), so a
  * single model is not enough to keep a public demo alive. Each model has its
  * own bucket; on a quota or overload error we roll to the next one.
+ *
+ * The override has to survive a blank value, not just a missing one. A variable
+ * added in a hosting dashboard and left empty arrives as "", which `??` accepts
+ * happily — and the empty list that followed made every call fall straight
+ * through the retry loop and throw `String(undefined)`. Production answered
+ * every upload with "Reading the question paper: undefined", which named
+ * neither the cause nor the fix.
  */
-export const MODELS: string[] = (
-  process.env.GEMINI_MODELS ??
-  "gemini-3.5-flash,gemini-3.6-flash,gemini-3-flash-preview,gemini-3.1-flash-lite"
-)
-  .split(",")
-  .map((m) => m.trim())
-  .filter(Boolean);
+function configuredModels(): string[] {
+  const listed = (process.env.GEMINI_MODELS || DEFAULT_MODELS)
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
+  return listed.length > 0 ? listed : DEFAULT_MODELS.split(",");
+}
+
+export const MODELS: string[] = configuredModels();
 
 let client: GoogleGenAI | null = null;
 
@@ -140,5 +152,12 @@ export async function generateJson<T>({
   }
 
   if (isRetryableAcrossModels(lastError)) throw new QuotaExhaustedError();
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  if (lastError instanceof Error) throw lastError;
+  // Never surface what a non-Error stringifies to. The error screen prints this
+  // verbatim, and "undefined" tells a reader nothing at all.
+  throw new Error(
+    lastError === undefined
+      ? "No model was reached. Check GEMINI_MODELS, or unset it to use the defaults."
+      : `Gemini failed: ${String(lastError)}`,
+  );
 }

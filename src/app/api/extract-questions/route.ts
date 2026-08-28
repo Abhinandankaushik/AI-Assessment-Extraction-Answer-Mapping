@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { extractQuestions } from "@/lib/ai/questions";
 import type { ImagePart } from "@/lib/ai/client";
 
 export const runtime = "nodejs";
-// Measured on the 10-page sample, individual calls run 10-30s. Requests are
-// issued concurrently where they are independent, so a route can hold several
-// at once and 60s was not enough.
+// Measured on the 10-page sample, individual calls run 10-30s and a long
+// question paper read can reach 80s, so the 60s default was not enough.
+// NOTE: 300 needs a paid Vercel plan; Hobby caps functions at 60s.
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
