@@ -79,11 +79,17 @@ export function DropZone({
         <>
           {single ? (
             // 66px tall, r12, padding 12/20/12/12, gap 12 — read off the frame.
-            <div className="relative mx-auto flex max-w-full items-center gap-3 rounded-xl bg-surface-2 py-3 pr-5 pl-3">
+            // The card is capped 20px short of the zone rather than at its full
+            // width: the remove button hangs 8px past the corner, and the zone
+            // clips its own overflow, so a card grown to the edge by a long
+            // filename took the button with it.
+            <div className="relative mx-auto flex min-w-0 max-w-[calc(100%-20px)] items-center gap-3 rounded-xl bg-surface-2 py-3 pr-5 pl-3">
               <PdfIcon />
               <div className="min-w-0">
-                <p className="t-p3-bold truncate text-dark">{files[0].name}</p>
-                <p className="t-p5 text-center text-muted/80">
+                <p className="t-p3-bold truncate text-dark" title={files[0].name}>
+                  {files[0].name}
+                </p>
+                <p className="t-p5 truncate text-muted/80">
                   {formatBytes(files[0].size)} &nbsp;•&nbsp;{" "}
                   {plural(files[0].pageCount, "Page")}
                 </p>
