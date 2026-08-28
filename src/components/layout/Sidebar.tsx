@@ -115,8 +115,15 @@ export function Sidebar() {
 
         <button
           type="button"
-          className="font-ui mt-14 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-dark text-[16px] font-medium tracking-[-0.04em] text-white ring-2 ring-brand transition-transform active:scale-[0.99]"
-          style={{ boxShadow: "0 6px 20px 0 rgb(255 86 35 / 0.28)" }}
+          className="font-ui mt-14 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-dark text-[16px] font-medium tracking-[-0.04em] text-white transition-transform active:scale-[0.99]"
+          // The border rides in the same shadow as the glow rather than coming
+          // from ring-*: Tailwind builds rings out of box-shadow, and the
+          // inline glow below replaces that whole property, so a ring class
+          // here was silently painted over and never appeared at all.
+          style={{
+            boxShadow:
+              "0 0 0 2px var(--color-brand), 0 6px 20px 0 rgb(255 86 35 / 0.28)",
+          }}
         >
           <Sparkles size={16} />
           AI Teacher&rsquo;s Toolkit
