@@ -22,6 +22,9 @@ Hard rules:
 8. "page" is the 1-based index of the page image the question STARTS on.
 `.trim();
 
+/** The order is binding, not decorative: the number is copied off the page
+ *  before the text is read, so a question cannot pick up its neighbour's
+ *  numbering. "properties" alone promises nothing about order over the wire. */
 const QUESTION_ITEM = {
   type: Type.OBJECT,
   properties: {
@@ -30,12 +33,14 @@ const QUESTION_ITEM = {
     marks: { type: Type.INTEGER, nullable: true },
     page: { type: Type.INTEGER },
   },
+  propertyOrdering: ["displayNumber", "text", "marks", "page"],
   required: ["displayNumber", "text", "page"],
 } as const;
 
 const EXTRACT_SCHEMA = {
   type: Type.OBJECT,
   properties: { questions: { type: Type.ARRAY, items: QUESTION_ITEM } },
+  propertyOrdering: ["questions"],
   required: ["questions"],
 } as const;
 
@@ -52,10 +57,12 @@ const AUDIT_SCHEMA = {
           displayNumber: { type: Type.STRING },
           parts: { type: Type.ARRAY, items: QUESTION_ITEM },
         },
+        propertyOrdering: ["displayNumber", "parts"],
         required: ["displayNumber", "parts"],
       },
     },
   },
+  propertyOrdering: ["missing", "spurious", "split"],
   required: ["missing", "spurious", "split"],
 } as const;
 

@@ -14,6 +14,8 @@ const SYSTEM =
   "You mark what the student actually wrote, you award partial credit fairly, " +
   "and your feedback is one or two plain sentences a student can act on.";
 
+/** Ordered so the mark is committed before the feedback justifying it, and so
+ *  the closing summary is written after every question has been marked. */
 const GRADE_ITEM = {
   type: Type.OBJECT,
   properties: {
@@ -22,6 +24,7 @@ const GRADE_ITEM = {
     verdict: { type: Type.STRING, enum: ["correct", "partial", "incorrect"] },
     feedback: { type: Type.STRING },
   },
+  propertyOrdering: ["questionId", "awarded", "verdict", "feedback"],
   required: ["questionId", "awarded", "verdict", "feedback"],
 } as const;
 
@@ -31,12 +34,14 @@ const SCHEMA = {
     grades: { type: Type.ARRAY, items: GRADE_ITEM },
     overall: { type: Type.STRING, nullable: true },
   },
+  propertyOrdering: ["grades", "overall"],
   required: ["grades"],
 } as const;
 
 const SUMMARY_SCHEMA = {
   type: Type.OBJECT,
   properties: { overall: { type: Type.STRING } },
+  propertyOrdering: ["overall"],
   required: ["overall"],
 } as const;
 
